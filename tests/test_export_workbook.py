@@ -21,13 +21,13 @@ OUT = ROOT / "tests/artifacts/export-layout"
 def payload(locks=True, versions=True):
     months = ["2026-08", "2026-10", "2026-12", "2027-02"]
     records = [
-        ("车型汇总", "问界", "M5", "", "锁单数", [120, None, 0, None], None, "交车锁单原数，未分摊版本"),
+        ("车型汇总", "问界", "M5", "", "锁单数", [120, None, 0, None], 150, "交车锁单原数，未分摊版本"),
         ("车型汇总", "问界", "M5", "", "SOP计划量", [30, 0, 70, None], 700, "部分月份缺项，仅已知合计"),
         ("版本明细", "问界", "M5", "同名版本", "锁单数", [None] * 4, None, "版本锁单缺失，未分摊"),
         ("版本明细", "问界", "M5", "同名版本", "锁单数", [None] * 4, None, "版本锁单缺失，同名版本第二项"),
         ("版本明细", "问界", "M5", "同名版本", "SOP计划量", [10, 0, 30, None], 300, "同名版本第一项"),
         ("版本明细", "问界", "M5", "同名版本", "SOP计划量", [20, None, 40, None], 400, "同名版本第二项"),
-        ("车型汇总", "智界", "M5", "", "锁单数", [50, 0, None, None], None, "交车锁单原数，未分摊版本"),
+        ("车型汇总", "智界", "M5", "", "锁单数", [50, 0, None, None], 50, "交车锁单原数，未分摊版本"),
         ("车型汇总", "智界", "M5", "", "SOP计划量", [5, 0, None, None], 100, "2027-02未适用"),
         ("版本明细", "智界", "M5", "=1+1", "锁单数", [None] * 4, None, "来源缺失"),
         ("版本明细", "智界", "M5", "=1+1", "SOP计划量", [5, 0, None, None], 100, "2027-02未适用"),
@@ -66,7 +66,7 @@ def actual_input_payload(root=None):
         if source.cell(3, c).value:
             year = str(source.cell(3, c).value).removesuffix("年")
         label = source.cell(4, c).value
-        if label == "年度合计":
+        if label in ("年度合计", f"{year}总计"):
             annual[year] = c
         else:
             columns.append((f"{year}-{int(str(label).removesuffix('月')):02}", c))
@@ -205,10 +205,10 @@ class ExportWorkbookTest(unittest.TestCase):
                 self.assertEqual(f.freeze_panes, f"{openpyxl.utils.get_column_letter(first)}5")
                 self.assertEqual(s["A3"].fill.fgColor.rgb, reference["A3"].fill.fgColor.rgb)
                 self.assertEqual(s.cell(4, first).fill.fgColor.rgb, reference["D4"].fill.fgColor.rgb)
-                self.assertEqual(s.cell(4, first + 3).value, "年度合计")
+                self.assertEqual(s.cell(4, first + 3).value, "2026总计")
                 self.assertEqual(s.cell(5, first + 3).fill.fgColor.rgb, reference["P5"].fill.fgColor.rgb)
                 # Only chosen months are shown, with the full calendar year SOP after December.
-                self.assertEqual([s.cell(4, first + i).value for i in range(5)], ["8月", "10月", "12月", "年度合计", "2月"])
+                self.assertEqual([s.cell(4, first + i).value for i in range(5)], ["8月", "10月", "12月", "2026总计", "2月"])
                 self.assertEqual(s.max_column, first + 4, "No extra metric/notes column")
                 self.assertEqual(s["A1"].value, "SOP计划表")
                 self.assertEqual(s.cell(1, first).value, "2026-08—2027-02")
@@ -217,7 +217,7 @@ class ExportWorkbookTest(unittest.TestCase):
                 self.assertEqual([s.cell(total, first + i).value for i in range(5)], [35, 0, 70, 800, None])
                 if locks:
                     lock_total = next(r for r in range(5, s.max_row + 1) if s.cell(r, 1).value == "锁单总计")
-                    self.assertEqual([s.cell(lock_total, first + i).value for i in range(5)], [170, 0, 0, None, None])
+                    self.assertEqual([s.cell(lock_total, first + i).value for i in range(5)], [170, 0, 0, 200, None])
                 else:
                     self.assertFalse(any(isinstance(c.value, str) and "锁单" in c.value for row in s if row[0].row > 4 for c in row))
                 model_rows = [r for r in range(5, s.max_row + 1) if s.cell(r, 2).value == "M5 合计"]

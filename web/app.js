@@ -107,6 +107,8 @@ let optionMix=null, optionMixError='', optionBrand='', optionModel='', optionDim
 // corrected model and version lock rows are visible; future choices persist.
 const lockPreferenceKey = 'sop-show-locks-v2';
 let showLocks = localStorage.getItem(lockPreferenceKey) !== 'false';
+const demandPreferenceKey = 'sop-show-demand';
+let showDemand = localStorage.getItem(demandPreferenceKey) === 'true';
 const wenjiePreferenceKey = 'sop-show-wenjie';
 let showWenjie = localStorage.getItem(wenjiePreferenceKey) !== 'false';
 const committeePreferenceKey = 'sop-show-committee';
@@ -167,7 +169,7 @@ function rowHidden(level,id){return Object.hasOwn(hiddenRows,rowViewKey(level,id
 function productHidden(p){return rowHidden('brand',p.brand)||rowHidden('model',modelGroupKey(p))||rowHidden('version',p.id);}
 function hideRow(level,id,label){hiddenRows[rowViewKey(level,id)]=label;refreshHiddenRows();}
 function hiddenControl(level,id,label){return `<button class="row-visibility" type="button" data-hide-level="${level}" data-hide-id="${esc(id)}" data-hide-label="${esc(label)}" aria-label="隐藏${esc(label)}" title="隐藏此组行，不改变合计">隐藏</button>`;}
-function viewConfig(){return {generation_mode:generationMode(),hidden:{...hiddenRows},range,planYear,brand,model,query,showLocks,showWenjie,allExpanded,expanded:[...expanded],showCommitteeLevels:[...showCommitteeLevels]};}
+function viewConfig(){return {generation_mode:generationMode(),hidden:{...hiddenRows},range,planYear,brand,model,query,showLocks,showDemand,showWenjie,allExpanded,expanded:[...expanded],showCommitteeLevels:[...showCommitteeLevels]};}
 function compatibleHiddenRows(saved){
   const result={};
   for(const [key,label] of Object.entries(saved||{})){
@@ -179,6 +181,7 @@ function compatibleHiddenRows(saved){
   return result;
 }
 function restoreViewConfig(config){
+  showDemand=config.showDemand===true;localStorage.setItem(demandPreferenceKey,String(showDemand));
   hiddenRows=config.hidden&&typeof config.hidden==='object'&&!Array.isArray(config.hidden)?compatibleHiddenRows(config.hidden):{};
   range=config.range==='annual'?'annual':'rolling';planYear=String(config.planYear||'');brand=String(config.brand||'');model=String(config.model||'');query=String(config.query||'');
   showLocks=config.showLocks!==false;showWenjie=config.showWenjie!==false;showCommitteeLevels=committeeVisibilityFromConfig(config,showCommitteeLevels);allExpanded=!!config.allExpanded;expanded=new Set(Array.isArray(config.expanded)?config.expanded:[]);
@@ -406,7 +409,7 @@ async function api(path, body) {
   }
   if (!response.ok) {
     const error = new Error(data.error || data.message || `请求失败（${response.status}）`);
-    error.status = response.status; throw error;
+    error.status = response.status; error.data = data; throw error;
   }
   return data;
 }
@@ -599,15 +602,14 @@ function annualQuantity(ps,visibleMonths,field,allowModelTotals=ps.length>1) {
 }
 function annualCell(ps,visibleMonths,field,planYear='',allowModelTotals=ps.length>1) {
   const q=annualQuantity(ps,visibleMonths,field,allowModelTotals);
-  const title=[planYear?`${planYear}年1—12月SOP计划，含视图外月份`:'',q.model_reference?'含车型汇总锁单':''].filter(Boolean).join('；');
+  const title=[planYear?`${planYear}年1—12月${field==='locks'?'锁单':'SOP计划'}，含视图外月份`:'',q.model_reference?'含车型汇总锁单':''].filter(Boolean).join('；');
   return `<td class="annual-total number${planYear?' calendar-plan':''}"${planYear?` data-plan-year="${planYear}"`:''}${title?` title="${title}"`:''}>${q.value==null?'':`<strong>${fmt(q.value)}</strong>`}</td>`;
 }
-function calendarPlanCell(ps,year,field) {
-  if(field==='locks')return `<td class="annual-total number calendar-plan" data-plan-year="${year}" title="此列仅统计${year}年度SOP计划量"><span class="missing">—</span></td>`;
-  return annualCell(ps,yearMonths(year),'sop',year);
+function calendarPlanCell(ps,year,field,allowModelTotals=ps.length>1) {
+  return annualCell(ps,yearMonths(year),field,year,allowModelTotals);
 }
 function calendarPlanHeader(year) {
-  return `<th scope="col" class="annual-total calendar-plan" data-plan-year="${year}" title="汇总${year}年1—12月全部SOP计划，包含当前视图未展示的月份">${year}年<span class="annual-caption">年度计划量</span></th>`;
+  return `<th scope="col" class="annual-total calendar-plan" data-plan-year="${year}" title="${year}年1—12月总计，包含视图外月份">${year}总计</th>`;
 }
 function planMetricRow(ps,label,level,id,visibleMonths,field,{isOpen=false,showName=true,rowSpan=1,blockStart=false}={}) {
   const one=level==='version', p=one?ps[0]:null;
@@ -645,7 +647,7 @@ function planMetricRow(ps,label,level,id,visibleMonths,field,{isOpen=false,showN
         : modelDraft?isPlanMonthOpen(m)&&(!draftRow.original||canEditProduct(draftRow.original,m)):canEditProduct(p,m);
       if(editable)cell=`<td class="sop-cell number${past}">${gridCell(draftRow,m)}</td>`;
     }
-    return cell+(range==='rolling'&&m.endsWith('-12')?calendarPlanCell(ps,m.slice(0,4),field):'');
+    return cell+(range==='rolling'&&m.endsWith('-12')?calendarPlanCell(ps,m.slice(0,4),field,!one):'');
   }).join('');
   const nameCell=showName?`<th scope="row" class="sticky-name"${rowSpan>1?` rowspan="${rowSpan}"`:''}>${labelContent}</th>`:'';
   return `<tr class="${cls} ${isLock?'metric-lock-row':'metric-plan-row'}${!one&&showName?' summary-start':''}${blockStart?' metric-block-start':''}" data-plan-metric="${field}"${one?` data-version="${esc(p.id)}"`:''}>${nameCell}<td class="sticky-metric"><span class="metric-label ${isLock?'lock-label':'plan-label'}">${isLock?'锁单数':'SOP计划量'}</span></td>${cells}${range==='rolling'?'':annualCell(ps,visibleMonths,field,'',!one)}</tr>`;
@@ -664,11 +666,30 @@ function committeeRows(modelKey,visibleMonths,levels=visibleCommitteeLevels()) {
     return `<tr class="committee-row" data-committee-level="${level}" data-committee-model="${esc(modelKey)}"><th scope="row" class="sticky-metric">上期${committeeLevels[level]}</th>${cells}${range==='rolling'?'':annual(planYear)}</tr>`;
   }).join('');
 }
+function demandQuantity(ps,month) {
+  const groups=new Map();for(const p of ps){const id=modelGroupKey(p);if(!groups.has(id))groups.set(id,[]);groups.get(id).push(p);}
+  const valueFor=group=>{
+    const p=group[0],row=(state.demand_plans||[]).find(r=>r.brand===p.brand&&r.model===p.model&&r.month===month);
+    if(row?.quantity!=null)return row.quantity;
+    const children=childProducts(group),members=new Map();for(const child of children){const id=modelGroupKey(child);if(!members.has(id))members.set(id,[]);members.get(id).push(child);}
+    const values=[...members.values()].map(items=>(state.demand_plans||[]).find(r=>r.brand===items[0].brand&&r.model===items[0].model&&r.month===month)?.quantity).filter(v=>v!=null);
+    return values.length?values.reduce((sum,v)=>sum+v,0):null;
+  };
+  const values=[...groups.values()].map(valueFor).filter(v=>v!=null);
+  return values.length?values.reduce((sum,v)=>sum+v,0):null;
+}
+function demandRow(ps,level,visibleMonths) {
+  const yearly=year=>{const values=yearMonths(year).map(m=>demandQuantity(ps,m)).filter(v=>v!=null);return `<td class="annual-total number calendar-plan">${values.length?fmt(values.reduce((sum,v)=>sum+v,0)):''}</td>`;};
+  const cls=level==='total'?'total-row':level==='brand'?'group-row':'model-row';
+  const cells=visibleMonths.map(m=>`<td class="number${m<state.current_month?' past-month':''}">${fmt(demandQuantity(ps,m))}</td>${range==='rolling'&&m.endsWith('-12')?yearly(m.slice(0,4)):''}`).join('');
+  return `<tr class="${cls} metric-demand-row" data-plan-metric="demand"><td class="sticky-metric"><span class="metric-label">要货计划</span></td>${cells}${range==='rolling'?'':yearly(planYear)}</tr>`;
+}
 function planRow(ps,label,level,id,visibleMonths,isOpen=false) {
   const committeeLevelRows=level==='model'&&ps.length&&state.committee?visibleCommitteeLevels():[];
-  const rowSpan=(showLocks?2:1)+committeeLevelRows.length;
+  const rowSpan=(showLocks?2:1)+(showDemand?1:0)+committeeLevelRows.length;
   const locks=showLocks?planMetricRow(ps,label,level,id,visibleMonths,'locks',{isOpen,rowSpan}):'';
   return locks+planMetricRow(ps,label,level,id,visibleMonths,'sop',{isOpen,showName:!showLocks,rowSpan})+
+    (showDemand?demandRow(ps,level,visibleMonths):'')+
     (committeeLevelRows.length?committeeRows(id,visibleMonths,committeeLevelRows):'');
 }
 function planVersionRows(ps,visibleMonths) {
@@ -729,11 +750,11 @@ function planning() {
   if(gridDraft&&!rows)rows+=planRow([],brand||'品牌','brand',brand,visible);
   rows+=gridNewRows('',visible);
   rows+=planRow(ps,brand?`${brand}合计`:showWenjie?'鸿蒙智行合计':'合计（不含问界）','total','',visible);
-  const actions=`<div class="toolbar plan-actions">${gridDraft?button(gridDraft.saving?'正在保存…':gridDraft.uncertain?'重试确认保存':'保存修改','grid-save','primary small',gridDraft.saving?'disabled':'')+button('取消','grid-cancel','small',gridLocked()?'disabled':''):button(`${planToolIcon('edit')}网页维护`,'bulk-plan','primary small')}<div class="plan-file-actions">${button(`${planToolIcon('import')}导入Excel`,'import-plan','small')}${button(`${planToolIcon('export')}导出`,'export-plan','small')}</div></div>`;
+  const actions=`<div class="toolbar plan-actions">${gridDraft?button(gridDraft.saving?'正在保存…':gridDraft.uncertain?'重试确认保存':'保存修改','grid-save','primary small',gridDraft.saving?'disabled':'')+button('取消','grid-cancel','small',gridLocked()?'disabled':''):button(`${planToolIcon('edit')}网页维护`,'bulk-plan','primary small')}<div class="plan-file-actions">${button(`${planToolIcon('import')}导入Excel`,'import-plan','small')}${button(`${planToolIcon('export')}导出Excel`,'export-plan','small')}</div></div>`;
   $('#app').innerHTML=`${pageHeading('planning')}
-    <div class="plan-controls"><div class="annual-toolbar"><div class="annual-filters"><label class="field inline-field year-field">周期<select id="range-filter">${opt('rolling','M+6（滚动12个月）',range)}${opt('annual','全年',range)}</select></label>${rolling?'':`<label class="field inline-field year-field">年份<select id="year-filter">${years.map(y=>opt(y,`${y}年`,planYear)).join('')}</select></label>`}<label class="field inline-field">品牌<select id="brand-filter">${opt('','全部品牌',brand)}${visibleBrands().map(b=>opt(b,b,brand)).join('')}</select></label><label class="field inline-field">车型<select id="model-filter">${opt('','全部车型',model)}${models.map(m=>opt(m,m,model)).join('')}</select></label><label class="field inline-field annual-search"><span class="visually-hidden">搜索车型或版本</span>${planToolIcon('search')}<input id="version-search" placeholder="搜索车型 / 版本" value="${esc(query)}"></label></div><div class="plan-toolbar-actions"><div class="toolbar display-toggles">${committeeToggles}${button(wenjieToggleLabel(),'toggle-wenjie','small lock-toggle',`aria-pressed="${showWenjie}"`)}${button(lockToggleLabel(),'toggle-locks','small lock-toggle',`aria-pressed="${showLocks}"`)}${button(`${planToolIcon('expand')}${allExpanded?'收起明细':'展开明细'}`,'expand-all','small text-action')}</div>${actions}</div></div>
+    <div class="plan-controls"><div class="annual-toolbar"><div class="annual-filters"><label class="field inline-field year-field">周期<select id="range-filter">${opt('rolling','M+6（滚动12个月）',range)}${opt('annual','全年',range)}</select></label>${rolling?'':`<label class="field inline-field year-field">年份<select id="year-filter">${years.map(y=>opt(y,`${y}年`,planYear)).join('')}</select></label>`}<label class="field inline-field">品牌<select id="brand-filter">${opt('','全部品牌',brand)}${visibleBrands().map(b=>opt(b,b,brand)).join('')}</select></label><label class="field inline-field">车型<select id="model-filter">${opt('','全部车型',model)}${models.map(m=>opt(m,m,model)).join('')}</select></label><label class="field inline-field annual-search"><span class="visually-hidden">搜索车型或版本</span>${planToolIcon('search')}<input id="version-search" placeholder="搜索车型 / 版本" value="${esc(query)}"></label></div><div class="plan-toolbar-actions"><div class="toolbar display-toggles">${committeeToggles}${button('显示要货计划','toggle-demand','small lock-toggle',`aria-pressed="${showDemand}"`)}${button(wenjieToggleLabel(),'toggle-wenjie','small lock-toggle',`aria-pressed="${showWenjie}"`)}${button(lockToggleLabel(),'toggle-locks','small lock-toggle',`aria-pressed="${showLocks}"`)}${button(`${planToolIcon('expand')}${allExpanded?'收起明细':'展开明细'}`,'expand-all','small text-action')}</div>${actions}</div></div>
     <div class="sheet-tools">${viewControls()}<div class="sheet-meta"><span>销量截止 <strong>${esc(state.meta?.data_through_label||state.meta?.data_through||'待确认')}</strong></span><span>计划至 <strong>${shortMonth(state.plan_end)}</strong></span>${versionLockLatest?`<span>版本锁单最新来源月：<strong>${shortMonth(versionLockLatest)}</strong></span>`:''}${workbookStrip()}</div></div></div>
-    ${gridToolbar()}${generationWarnings()}<section class="card plan-card annual-sheet${gridDraft?' grid-editing':''}${rolling?' rolling-sheet':''}" aria-label="${rolling?'M+6':planYear+'年'}SOP计划表"><div class="table-scroll" tabindex="0" aria-label="${showLocks?'锁单和':''}SOP计划表，可横向滚动"><table class="plan-table" style="--plan-month-count:${visible.length}"><thead><tr><th scope="col" class="sticky-name">品牌 / 车型 / 版本</th><th scope="col" class="sticky-metric">指标</th>${visible.map((m,i)=>`<th scope="col" class="${m===state.current_month?'selected-month':''}${m<state.current_month?' past-month':''}" title="${m}${m<state.current_month?' · 已过去月份':''}${isPlanMonthOpen(m)?'':' · SOP未开放'}">${rolling?shortMonth(m):`${Number(m.slice(5))}月`}${rolling?`<span class="month-tag">${i<5?`M${i-5}`:i===5?'本月':`M+${i-5}`}</span>`:m===state.current_month?'<span class="month-tag">本月</span>':''}</th>${rolling&&m.endsWith('-12')?calendarPlanHeader(m.slice(0,4)):''}`).join('')}${rolling?'':`<th scope="col" class="annual-total">${planYear}年合计</th>`}</tr></thead><tbody>${ps.length||gridDraft?rows:`<tr><td colspan="${visible.length+3}" class="empty-state">没有符合筛选条件的版本</td></tr>`}</tbody></table></div></section>`;  if(gridDraft){$$('.annual-toolbar input,.annual-toolbar select,.saved-view-strip input,.saved-view-strip select,.saved-view-strip button,[data-action=toggle-wenjie],[data-action=import-plan],[data-action=export-plan]').forEach(el=>el.disabled=true);if(gridLocked())$$('[data-expand],[data-action=expand-all],[data-action=toggle-locks]').forEach(el=>el.disabled=true);}
+    ${gridToolbar()}${generationWarnings()}<section class="card plan-card annual-sheet${gridDraft?' grid-editing':''}${rolling?' rolling-sheet':''}" aria-label="${rolling?'M+6':planYear+'年'}SOP计划表"><div class="table-scroll" tabindex="0" aria-label="${showLocks?'锁单和':''}SOP计划表，可横向滚动"><table class="plan-table" style="--plan-month-count:${visible.length}"><thead><tr><th scope="col" class="sticky-name">品牌 / 车型 / 版本</th><th scope="col" class="sticky-metric">指标</th>${visible.map((m,i)=>`<th scope="col" class="${m===state.current_month?'selected-month':''}${m<state.current_month?' past-month':''}" title="${m}${m<state.current_month?' · 已过去月份':''}${isPlanMonthOpen(m)?'':' · SOP未开放'}">${rolling?shortMonth(m):`${Number(m.slice(5))}月`}${rolling?`<span class="month-tag">${i<5?`M${i-5}`:i===5?'本月':`M+${i-5}`}</span>`:m===state.current_month?'<span class="month-tag">本月</span>':''}</th>${rolling&&m.endsWith('-12')?calendarPlanHeader(m.slice(0,4)):''}`).join('')}${rolling?'':`<th scope="col" class="annual-total">${planYear}总计</th>`}</tr></thead><tbody>${ps.length||gridDraft?rows:`<tr><td colspan="${visible.length+3}" class="empty-state">没有符合筛选条件的版本</td></tr>`}</tbody></table></div></section>`;  if(gridDraft){$$('.annual-toolbar input,.annual-toolbar select,.saved-view-strip input,.saved-view-strip select,.saved-view-strip button,[data-action=toggle-wenjie],[data-action=import-plan],[data-action=export-plan]').forEach(el=>el.disabled=true);if(gridLocked())$$('[data-expand],[data-action=expand-all],[data-action=toggle-locks]').forEach(el=>el.disabled=true);}
 }
 function openDialog(html) { $('#edit-dialog').classList.toggle('catalog-dialog',html.includes('id="catalog-manager"')); $('#edit-dialog').classList.toggle('export-dialog',html.includes('id="export-plan-form"')||html.includes('id="import-plan-form"')); $('#dialog-content').innerHTML=html; const title=$('h2',$('#dialog-content'));if(title)title.id='dialog-title';applyAccessControls();$('#edit-dialog').showModal(); }
 function closeDialog() { $('#edit-dialog').close(); }
@@ -911,9 +932,9 @@ function buildPlanExport({includeLocks=false,includeVersions=true,selectedMonths
       describe(q=>q.reference_conflict,'新旧来源同月冲突，冲突部分未汇总');
       const annual={};
       for(const year of annualYears) {
-        const total=field==='sop'?annualQuantity(items,yearMonths(year),'sop'):null;
+        const total=annualQuantity(items,yearMonths(year),field,!detail);
         annual[year]=total?.value??null;
-        if(total?.value!=null&&!total.complete)notes.push(`${year}年度计划仅含已知值，${total.knownMonths}/${total.totalMonths}个月有数据${total.partial?'，版本仍有缺项':''}`);
+        if(field==='sop'&&total?.value!=null&&!total.complete)notes.push(`${year}年度计划仅含已知值，${total.knownMonths}/${total.totalMonths}个月有数据${total.partial?'，版本仍有缺项':''}`);
       }
       rows.push([detail?'版本明细':'车型汇总',p.brand,p.model,...(includeVersions?[detail?items[0].version:'']:[]),field==='locks'?'锁单数':'SOP计划量',...quantities.map(q=>q.value),notes.join('；')]);
       annualPlans.push(annual);
@@ -945,10 +966,12 @@ async function downloadPlanExport(options) {
   toast(`已导出所选 ${chosen.length} 个月的Excel${options.includeLocks?'（含锁单）':''}`);
   return result;
 }
-function exportPlans() {
+function exportPlans(kind='sop') {
+  if(kind==='demand')return exportDemandPlans();
   const defaults=maintenanceExportOptions(),maintenance=new Set(defaults.selectedMonths),available=exportableMonths(),current=new Set(months());
   const years=[...new Set(available.map(m=>m.slice(0,4)))],hasFilter=!!(brand||model||query);
-  openDialog(`<form id="export-plan-form"><h2>导出SOP计划</h2><p id="export-scope" class="subtitle"></p><div id="export-error" class="inline-error" role="alert"></div><fieldset class="export-content-options"><legend>导出内容</legend><label class="export-check"><input type="checkbox" id="export-wenjie" checked><span>包含问界</span></label><label class="export-check"><input type="checkbox" id="export-locks"><span>增加锁单行</span></label><label class="export-check"><input type="checkbox" id="export-versions" checked><span>${hierarchicalPlanning()?'包含单代际及版本明细':generationMode()==='summary'?'包含版本明细（只读）':'包含版本明细'}</span></label>${hasFilter?'<label class="export-check"><input type="checkbox" id="export-filtered"><span>仅导出当前筛选</span></label>':''}</fieldset><div class="export-month-heading"><h3>导出月份</h3><div class="toolbar"><button type="button" class="button ghost small" data-export-preset="maintenance">恢复维护表格式</button><button type="button" class="button ghost small" data-export-months="current">当前视图</button><button type="button" class="button ghost small" data-export-months="all">全部月份</button><button type="button" class="button ghost small" data-export-months="none">清空</button></div></div><div class="export-month-list">${years.map(y=>`<fieldset class="export-month-year"><legend>${y}年</legend><div class="export-month-grid">${available.filter(m=>m.startsWith(y+'-')).map(m=>`<label class="export-check"><input type="checkbox" name="export-month" value="${m}" aria-label="${y}年${Number(m.slice(5))}月" ${maintenance.has(m)?'checked':''}><span>${Number(m.slice(5))}月</span></label>`).join('')}</div></fieldset>`).join('')}</div><p id="export-selection" class="export-selection" role="status"></p><div class="dialog-actions">${button('取消','close-dialog')}<button type="submit" class="button primary">导出维护模板</button></div></form>`);
+  openDialog(`<form id="export-plan-form"><h2>导出Excel</h2>${excelKindSelector('sop')}<p id="export-scope" class="subtitle"></p><div id="export-error" class="inline-error" role="alert"></div><fieldset class="export-content-options"><legend>导出内容</legend><label class="export-check"><input type="checkbox" id="export-wenjie" checked><span>包含问界</span></label><label class="export-check"><input type="checkbox" id="export-locks"><span>增加锁单行</span></label><label class="export-check"><input type="checkbox" id="export-versions" checked><span>${hierarchicalPlanning()?'包含单代际及版本明细':generationMode()==='summary'?'包含版本明细（只读）':'包含版本明细'}</span></label>${hasFilter?'<label class="export-check"><input type="checkbox" id="export-filtered"><span>仅导出当前筛选</span></label>':''}</fieldset><div class="export-month-heading"><h3>导出月份</h3><div class="toolbar"><button type="button" class="button ghost small" data-export-preset="maintenance">恢复维护表格式</button><button type="button" class="button ghost small" data-export-months="current">当前视图</button><button type="button" class="button ghost small" data-export-months="all">全部月份</button><button type="button" class="button ghost small" data-export-months="none">清空</button></div></div><div class="export-month-list">${years.map(y=>`<fieldset class="export-month-year"><legend>${y}年</legend><div class="export-month-grid">${available.filter(m=>m.startsWith(y+'-')).map(m=>`<label class="export-check"><input type="checkbox" name="export-month" value="${m}" aria-label="${y}年${Number(m.slice(5))}月" ${maintenance.has(m)?'checked':''}><span>${Number(m.slice(5))}月</span></label>`).join('')}</div></fieldset>`).join('')}</div><p id="export-selection" class="export-selection" role="status"></p><div class="dialog-actions">${button('取消','close-dialog')}<button type="submit" class="button primary">导出维护模板</button></div></form>`);
+  $('#excel-kind').onchange=e=>exportPlans(e.target.value);
   const form=$('#export-plan-form'),monthInputs=$$('input[name="export-month"]',form),save=$('button[type="submit"]',form);
   const versionOption=$('#export-versions',form),lockOption=$('#export-locks',form),wenjieOption=$('#export-wenjie',form),filterOption=$('#export-filtered',form);
   const reset=()=>{
@@ -972,7 +995,7 @@ function exportPlans() {
   form.onsubmit=async e=>{
     e.preventDefault();if(form.getAttribute('aria-busy')==='true')return;
     const options={includeLocks:lockOption.checked,includeVersions:versionOption.checked,includeWenjie:wenjieOption.checked,selectedMonths:monthInputs.filter(el=>el.checked).map(el=>el.value),allProducts:!filterOption?.checked};
-    const controls=$$('input,button',form),previous=controls.map(el=>el.disabled);
+    const controls=$$('input,select,button',form),previous=controls.map(el=>el.disabled);
     form.setAttribute('aria-busy','true');controls.forEach(el=>el.disabled=true);save.textContent='正在生成Excel…';$('#export-error',form).textContent='';
     try{await downloadPlanExport(options);if($('#export-plan-form')===form)closeDialog();}
     catch(err){if($('#export-plan-form')===form)$('#export-error',form).textContent=err.message;else toast(err.message,true);}
@@ -1017,15 +1040,33 @@ function planConflictTableHtml(conflicts,maintenance=false) {
 function planImportConflictsHtml(conflicts) {
   return `${planConflictTableHtml(conflicts)}<p class="form-help">${conflicts.some(c=>c.baseline_unknown)?'表格计划与网页当前值不一致，请选择保留网页值或采用表格值。':'两边都修改了以上单元格。选择仅作用于这些冲突项，其余修改正常合并。'}</p><div class="dialog-actions import-conflict-actions"><button type="button" class="button secondary" data-import-choice="db">冲突项保留网页值</button><button type="button" class="button primary" data-import-choice="workbook">冲突项采用Excel值</button></div>`;
 }
-function importPlans() {
-  openDialog(`<form id="import-plan-form"><h2>导入SOP计划</h2><div id="import-error" class="inline-error" role="alert" tabindex="-1"></div><label class="field import-file-field">Excel文件（.xlsx，最大 12 MB）<input id="import-plan-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label><p id="import-progress" class="import-progress" role="status" aria-live="polite"></p><div id="import-conflicts"></div><div class="dialog-actions">${button('取消','close-dialog')}<button id="import-save" type="submit" class="button primary" disabled>导入计划</button></div></form>`);
+function excelKindSelector(kind){return `<label class="field">计划类型<select id="excel-kind">${opt('sop','SOP计划',kind)}${opt('demand','要货计划',kind)}</select></label>`;}
+function exportDemandPlans(){
+  const available=exportableMonths();
+  openDialog(`<form id="export-plan-form"><h2>导出Excel</h2>${excelKindSelector('demand')}<div class="form-grid"><label class="field">开始月份<select id="demand-from">${available.map(m=>opt(m,shortMonth(m),available[0])).join('')}</select></label><label class="field">结束月份<select id="demand-to">${available.map(m=>opt(m,shortMonth(m),available.at(-1))).join('')}</select></label></div><label class="checkbox-field"><input id="demand-filtered" type="checkbox">仅当前筛选车型</label><div id="demand-error" class="inline-error" role="alert"></div><div class="dialog-actions">${button('取消','close-dialog')}<button type="submit" class="button primary">导出Excel</button></div></form>`);
+  $('#excel-kind').onchange=e=>exportPlans(e.target.value);
+  $('#export-plan-form').onsubmit=async e=>{
+    e.preventDefault();const form=e.target,save=$('button[type="submit"]',form);save.disabled=true;
+    try{
+      const start=$('#demand-from').value,end=$('#demand-to').value;
+      if(start>end)throw new Error('结束月份不能早于开始月份');
+      const months=available.filter(m=>m>=start&&m<=end),models=$('#demand-filtered').checked?[...new Map(products().map(p=>[modelGroupKey(p),{brand:p.brand,model:p.model}])).values()]:undefined;
+      const response=await serviceFetch('/api/demand/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({months,...(models?{models}:{})})});
+      if(!response.ok){const error=await response.json();throw new Error(error.error||'导出失败');}
+      const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download=`要货计划_${start}_${end}.xlsx`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);closeDialog();toast('要货计划已导出');
+    }catch(error){$('#demand-error').textContent=error.message;}finally{save.disabled=false;}
+  };
+}
+function importPlans(kind='sop') {
+  openDialog(`<form id="import-plan-form"><h2>导入Excel</h2>${excelKindSelector(kind)}<div id="import-error" class="inline-error" role="alert" tabindex="-1"></div><label class="field import-file-field">Excel文件（.xlsx，最大 12 MB）<input id="import-plan-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label><p id="import-progress" class="import-progress" role="status" aria-live="polite"></p><div id="import-conflicts"></div><div class="dialog-actions">${button('取消','close-dialog')}<button id="import-save" type="submit" class="button primary" disabled>导入计划</button></div></form>`);
   const form=$('#import-plan-form'),input=$('#import-plan-file'),save=$('#import-save'),error=$('#import-error'),progress=$('#import-progress'),conflicts=$('#import-conflicts'),dialog=$('#edit-dialog'),close=$('[data-close]',dialog);
   let prepared=null,pending=false,valid=false,hasConflicts=false,maintenanceBlocked=false,confirmationToken=null;
+  let demandBase=state.demand_revision;$('#excel-kind').onchange=e=>importPlans(e.target.value);
   const cancel=e=>{if(pending)e.preventDefault();};
   dialog.addEventListener('cancel',cancel);
   dialog.addEventListener('close',()=>dialog.removeEventListener('cancel',cancel),{once:true});
   const showError=message=>{error.textContent=message;error.focus();};
-  const setBusy=busy=>{pending=busy;form.setAttribute('aria-busy',String(busy));$$('input,button',form).forEach(el=>el.disabled=busy);close.disabled=busy;save.disabled=busy||!valid;save.hidden=hasConflicts||maintenanceBlocked;save.textContent=busy?'正在导入…':'导入计划';progress.textContent=busy?'正在检查表格并合并计划，请稍候…':'';};
+  const setBusy=busy=>{pending=busy;form.setAttribute('aria-busy',String(busy));$$('input,select,button',form).forEach(el=>el.disabled=busy);close.disabled=busy;save.disabled=busy||!valid;save.hidden=hasConflicts||maintenanceBlocked;save.textContent=busy?'正在导入…':'导入计划';progress.textContent=busy?'正在检查表格并合并计划，请稍候…':'';};
   input.onchange=()=>{
     prepared=null;confirmationToken=null;valid=false;hasConflicts=false;maintenanceBlocked=false;conflicts.innerHTML='';error.textContent='';
     try{validatePlanImportFile(input.files[0]);valid=true;}catch(err){if(input.files.length)showError(err.message);}
@@ -1051,7 +1092,8 @@ function importPlans() {
     error.textContent='';setBusy(true);
     try{
       prepared||=await readPlanImportFile(input.files[0]);
-      const result=await submitPlanImport(prepared,choice,confirmationToken);
+      const result=kind==='demand'?await api('/api/demand/import',{...prepared,base_revision:demandBase,owner:access.user||owner}):await submitPlanImport(prepared,choice,confirmationToken);
+      if(kind==='demand'){showDemand=true;localStorage.setItem(demandPreferenceKey,'true');}
       closeDialog();
       const message=result.imported||result.created||result.catalog_updated?`已导入 ${result.imported||0} 项计划${result.created?`，新增 ${result.created} 行`:''}${result.catalog_updated?`，更新 ${result.catalog_updated} 个版本`:''}${result.deactivated?`（其中停用 ${result.deactivated} 个）`:''}`:'计划已核对，没有需要导入的新修改';
       try{await load();toast(result.warning?`${message}；${result.warning}`:message,!!result.warning);}catch{toast(`${message}；页面刷新失败，请点击刷新查看${result.warning?`。${result.warning}`:''}`,true);}
@@ -1061,7 +1103,19 @@ function importPlans() {
         prepared=null;confirmationToken=null;input.value='';valid=false;hasConflicts=false;maintenanceBlocked=false;conflicts.innerHTML='';
         showError(`${err.message}\n请保存Excel后重新选择文件导入。`);return;
       }
-      if(err.status===409&&err.data?.source==='maintenance'){
+      if(err.status===409&&kind==='demand'&&err.data?.reload_workbook){
+        prepared=null;input.value='';valid=false;hasConflicts=false;conflicts.innerHTML='';
+      }else if(err.status===409&&kind==='demand'){
+        hasConflicts=true;
+        conflicts.innerHTML='<div class="dialog-actions"><button type="button" class="button secondary" id="demand-recheck">刷新后重新核对</button></div>';
+        $('#demand-recheck').onclick=async()=>{
+          if(pending)return;
+          setBusy(true);
+          try{await load(false);demandBase=state.demand_revision;hasConflicts=false;conflicts.innerHTML='';showError('已刷新当前要货计划。请核对后再次点击导入计划；表格非空值将覆盖相同车型和月份。');}
+          catch(refreshError){showError(refreshError.message);}
+          finally{setBusy(false);}
+        };
+      }else if(err.status===409&&err.data?.source==='maintenance'){
         showMaintenance(err.data);
       }else if(err.status===409&&Array.isArray(err.data?.conflicts)&&err.data.conflicts.length){
         hasConflicts=true;confirmationToken=err.data.confirmation_token;conflicts.innerHTML=planImportConflictsHtml(err.data.conflicts);
@@ -1116,11 +1170,13 @@ async function historyPage() {
     api('/api/snapshots'),api('/api/backups/status'),state.committee?api('/api/committee-decisions'):{items:[]},
   ]);
   snapshotList=archive.items;
+  const recent=[...snapshotList].sort((a,b)=>String(b.cutoff_at).localeCompare(String(a.cutoff_at)));
+  const recentLeft=String(recent[1]?.id||''),recentRight=String(recent[0]?.id||'');
   if(currentSnapshot) currentSnapshot=await api(`/api/snapshots/${encodeURIComponent(currentSnapshot.snapshot.id)}`);
   $('#app').innerHTML=pageHeading('history')+
     `<div class="sync-strip ${backups.failed?'warn':''}"><div><strong>Excel备份 · 已生成 ${backups.ready}/${backups.total} 份</strong>${backups.failed?'<p>备份生成失败，等待重试</p>':backups.pending?'<p>备份生成中</p>':''}<small>${esc(backups.directory)}</small>${backups.last_error?`<p>${esc(backups.last_error)}</p>`:''}</div><div class="toolbar">${button('刷新备份状态','refresh-backups','small')}</div></div>
     <div class="two-col page-section"><section class="card"><div class="panel-head"><div><h2>快照档案</h2><p>${snapshotList.length} 份快照</p></div>${button('保存会议快照','create-snapshot','primary small')}</div>${snapshotList.length?`<div class="snapshot-list">${snapshotList.map(s=>`<button class="snapshot-item ${s.id===currentSnapshot?.snapshot?.id?'active':''}" data-snapshot="${esc(s.id)}"><div><strong>${esc(s.label||s.business_date)}</strong><span class="badge ${s.kind==='manual'?'good':'neutral'}">${s.kind==='sunday'?'周日考核':s.kind==='daily'?'每日快照':'会议快照'}</span></div><p>截点 ${dateText(s.cutoff_at)}</p><small>实际保存 ${dateText(s.created_at)} · ${s.plan_count??0} 条计划 · ${snapshotBackupLabel(s.excel_backup)}</small></button>`).join('')}</div>`:'<div class="empty-state">暂无快照</div>'}</section>
-    <section class="card"><div class="panel-head"><div><h2>两次快照比较</h2></div></div><div class="card-body"><div class="form-grid"><label class="field">比较基准<select id="snapshot-left"><option value="">选择较早快照</option>${snapshotList.map(s=>opt(String(s.id),`${s.label||s.business_date} · ${dateText(s.cutoff_at)}`,'' )).join('')}</select></label><label class="field">当前快照<select id="snapshot-right"><option value="">选择较新快照</option>${snapshotList.map(s=>opt(String(s.id),`${s.label||s.business_date} · ${dateText(s.cutoff_at)}`,'' )).join('')}</select></label></div><div class="dialog-actions">${button('查看变化','compare-snapshots','primary')}</div><div id="comparison-result" class="empty-state compact">暂无比较结果</div></div></section></div>${committeeHistory(committees.items)}<section id="snapshot-detail"></section>`;
+    <section class="card"><div class="panel-head"><div><h2>两次快照比较</h2></div></div><div class="card-body"><div class="form-grid"><label class="field">比较基准<select id="snapshot-left"><option value="">选择较早快照</option>${snapshotList.map(s=>opt(String(s.id),`${s.label||s.business_date} · ${dateText(s.cutoff_at)}`,recentLeft )).join('')}</select></label><label class="field">当前快照<select id="snapshot-right"><option value="">选择较新快照</option>${snapshotList.map(s=>opt(String(s.id),`${s.label||s.business_date} · ${dateText(s.cutoff_at)}`,recentRight )).join('')}</select></label></div><div class="dialog-actions">${button('查看变化','compare-snapshots','primary',snapshotList.length<2?'disabled':'')}</div><div id="comparison-result" class="empty-state compact">暂无比较结果</div></div></section></div>${committeeHistory(committees.items)}<section id="snapshot-detail"></section>`;
   if(currentSnapshot)renderSnapshot(currentSnapshot);
   else if(currentCommitteeDecision)renderCommitteeDecision(currentCommitteeDecision);
 }
@@ -1159,7 +1215,13 @@ async function compareSnapshots() {
 async function matchingPage() {
   const request=++activeRequest;
   const params=new URLSearchParams({month:matchMonth,brand,model,product_id:matchProduct});
-  const d=await api('/api/matching?'+params);
+  $('#app').innerHTML='<div class="loading-state" role="status">正在读取匹配率…</div>';
+  let d;
+  try{d=await api('/api/matching?'+params);}catch(error){
+    if(request!==activeRequest||page!=='matching')return;
+    $('#app').innerHTML=`<div class="empty-state" role="alert">${esc(error.message)} ${button('重新读取','retry-matching')}</div>`;
+    $('[data-action="retry-matching"]').onclick=()=>matchingPage();return;
+  }
   if(request!==activeRequest||page!=='matching')return;
   const ps=products();
   $('#app').innerHTML=pageHeading('matching')+
@@ -1308,8 +1370,8 @@ function optionPageRender() {
   const years=planYears();optionYear=years.includes(optionYear)?optionYear:state.current_month.slice(0,4);
   const visible=optionMonths(),rolling=optionRange==='rolling';
   const selected=all.filter(group=>(!optionBrand||group.brand===optionBrand)&&(!optionModel||group.id===optionModel)&&(!!optionModel||visible.some(month=>optionPlanQuantity(group,month)!=null)));
-  const yearCell=year=>`<th scope="col" class="annual-total calendar-plan">${year}年年度计划量</th>`;
-  const headers=visible.map(month=>`<th scope="col" class="${month<state.current_month?'past-month':''}">${shortMonth(month)}</th>${rolling&&month.endsWith('-12')?yearCell(month.slice(0,4)):''}`).join('')+(rolling?'':`<th scope="col" class="annual-total">${optionYear}年合计</th>`);
+  const yearCell=year=>`<th scope="col" class="annual-total calendar-plan">${year}总计</th>`;
+  const headers=visible.map(month=>`<th scope="col" class="${month<state.current_month?'past-month':''}">${shortMonth(month)}</th>${rolling&&month.endsWith('-12')?yearCell(month.slice(0,4)):''}`).join('')+(rolling?'':`<th scope="col" class="annual-total">${optionYear}总计</th>`);
   const yearPlan=(group,year)=>{const values=yearMonths(year).map(month=>optionPlanQuantity(group,month)).filter(v=>v!=null);return values.length?fmt(values.reduce((sum,v)=>sum+v,0)):'';};
   const planCells=group=>visible.map(month=>`<td class="number${month<state.current_month?' past-month':''}">${fmt(optionPlanQuantity(group,month))}</td>${rolling&&month.endsWith('-12')?`<td class="number annual-total">${yearPlan(group,month.slice(0,4))}</td>`:''}`).join('')+(rolling?'':`<td class="number annual-total">${yearPlan(group,optionYear)}</td>`);
   const unavailable=new Map((optionMix?.missing_summaries||[]).map(entry=>[entry.generation,entry.error]));
@@ -1367,7 +1429,7 @@ async function optionPage() {
 let reconcilePage;
 async function renderReconcilePage() {
   if (!reconcilePage) {
-    const {createReconcilePage} = await import('./reconcile.mjs?v=6');
+    const {createReconcilePage} = await import('./reconcile.mjs?v=7');
     reconcilePage ||= createReconcilePage({
       host: $('#app'), api, serviceFetch, openDialog, closeDialog, toast, esc, fmt, dateText,
       isActive: () => page === 'reconcile', getOwner: () => access.user || owner, canWrite: () => access.canWrite,
@@ -1434,6 +1496,7 @@ async function handleAction(action,el) {
     $(`[data-action="toggle-committee"][data-committee-level="${level}"]`)?.focus({preventScroll:true});
     return;
   }
+  if(action==='toggle-demand'){showDemand=!showDemand;localStorage.setItem(demandPreferenceKey,String(showDemand));planning();return;}
   if(action==='toggle-locks'){
     const scroll=$('.plan-card .table-scroll'),left=scroll?.scrollLeft||0;
     showLocks=!showLocks;localStorage.setItem(lockPreferenceKey,String(showLocks));planning();
@@ -1480,7 +1543,7 @@ async function pollWorkbookStatus() {
       showGenerationError(view.error,'rules');
       return;
     }
-    if(generationViewError||generationStatusChanged(view)||sync.data_revision!==previous.data_revision||sync.last_sync!==previous.last_sync||sync.status!==previous.status||sync.message!==previous.message||JSON.stringify(sync.source_refresh||{})!==JSON.stringify(state.source_refresh||{})) {
+    if(generationViewError||generationStatusChanged(view)||sync.demand_revision!==state.demand_revision||sync.data_revision!==previous.data_revision||sync.last_sync!==previous.last_sync||sync.status!==previous.status||sync.message!==previous.message||JSON.stringify(sync.source_refresh||{})!==JSON.stringify(state.source_refresh||{})) {
       const scrolls=$$('.table-scroll').map(el=>({left:el.scrollLeft,top:el.scrollTop}));
       await load();$$('.table-scroll').forEach((el,i)=>{if(scrolls[i]){el.scrollLeft=scrolls[i].left;el.scrollTop=scrolls[i].top;}});
     }
@@ -1494,8 +1557,8 @@ document.addEventListener('click',async e=>{
     if('gridAddBrand' in el.dataset){gridAddRow(el.dataset.gridAddBrand,el.dataset.gridAddModel,el.dataset.gridAnchor);return;}
     if(el.dataset.optionExpand){const scroll=$('.option-sheet .table-scroll'),left=scroll?.scrollLeft||0,top=scroll?.scrollTop||0,id=el.dataset.optionExpand;if(optionExpanded.has(id))optionExpanded.delete(id);else optionExpanded.add(id);optionPageRender();const next=$('.option-sheet .table-scroll');if(next){next.scrollLeft=left;next.scrollTop=top;}$(`[data-option-expand="${CSS.escape(id)}"]`)?.focus({preventScroll:true});return;}
     if(el.dataset.expand){if(!gridLocked())toggleModel(el.dataset.expand);return;}
-    if(gridDraft&&!['grid-save','grid-cancel','grid-add','expand-all','toggle-locks','toggle-committee'].includes(el.dataset.action)){toast('请先保存或取消表内修改，再进行其他操作',true);return;}
-    if(gridLocked()&&['expand-all','toggle-locks','toggle-committee'].includes(el.dataset.action))return;
+    if(gridDraft&&!['grid-save','grid-cancel','grid-add','expand-all','toggle-locks','toggle-demand','toggle-committee'].includes(el.dataset.action)){toast('请先保存或取消表内修改，再进行其他操作',true);return;}
+    if(gridLocked()&&['expand-all','toggle-locks','toggle-demand','toggle-committee'].includes(el.dataset.action))return;
     if(el.dataset.hideLevel){hideRow(el.dataset.hideLevel,el.dataset.hideId,el.dataset.hideLabel);return;}
     if(el.dataset.restoreRow){delete hiddenRows[el.dataset.restoreRow];refreshHiddenRows();return;}
     if(el.dataset.catalogBind){requireWrite();bindProductSource(el.dataset.catalogBind);return;}

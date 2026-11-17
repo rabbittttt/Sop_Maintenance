@@ -12,7 +12,7 @@ const element=(props={})=>({checked:false,disabled:false,textContent:'',attrs:{}
   removeAttribute(k){delete this.attrs[k];},...props});
 context.captureDialog=markup=>{
   html=markup;
-  map=new Map(['export-plan-form','export-scope','export-selection','export-error','export-locks','export-wenjie','export-versions','export-filtered']
+  map=new Map(['excel-kind','export-plan-form','export-scope','export-selection','export-error','export-locks','export-wenjie','export-versions','export-filtered']
     .map(id=>['#'+id,element()]));
   form=map.get('#export-plan-form');active=form;
   const save=element(),preset=element(),cancel=element();
@@ -24,9 +24,9 @@ context.captureDialog=markup=>{
   controls=[...monthInputs,map.get('#export-locks'),map.get('#export-wenjie'),map.get('#export-versions'),map.get('#export-filtered'),save,preset,cancel,...monthButtons];
   form.querySelector=selector=>map.get(selector)||null;
   form.querySelectorAll=selector=>selector==='input[name="export-month"]'?monthInputs
-    :selector==='[data-export-months]'?monthButtons:selector==='input,button'?controls:[];
+    :selector==='[data-export-months]'?monthButtons:selector==='input,select,button'?controls:[];
 };
-context.document={querySelector:selector=>selector==='#export-plan-form'?active:null};
+context.document={querySelector:selector=>selector==='#export-plan-form'?active:map?.get(selector)||null};
 context.captureDownload=async options=>{
   submitted=JSON.parse(JSON.stringify(options));
   if(fail)throw new Error('计划表生成失败，测试错误信息');

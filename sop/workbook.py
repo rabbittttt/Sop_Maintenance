@@ -24,7 +24,7 @@ SCHEMA_VERSION = 5
 LAYOUT_VERSION = "continuous-inline-v2"
 # Bump this when managed workbook rendering or Excel compatibility changes
 # without changing its trusted cell map. Old exports resolve to revision 0.
-PRESENTATION_VERSION = 9
+PRESENTATION_VERSION = 10
 PREVIOUS_CONTINUOUS_LAYOUT = "continuous-blue-v2"
 LEGACY_CONTINUOUS_LAYOUT = "continuous-blue-v1"
 LEGACY_ANNUAL_LAYOUT = "annual-blue-v1"
@@ -144,7 +144,7 @@ def _continuous_layout(products, months, editable_months, current_month, plans=N
                             "label": f"{int(month[-2:])}月", "historical": month < current_month})
         total = len(columns) + 4
         columns.append({"column": total, "kind": "year_total", "year": year,
-                        "label": "年度合计" if len(year_months) == 12 else "期间合计"})
+                        "label": f"{year}总计" if len(year_months) == 12 else "期间合计"})
         years.append({"year": year, "first_column": first, "last_column": total,
                       "last_month_column": total - 1})
     product_column, kind_column = len(columns) + 4, len(columns) + 5

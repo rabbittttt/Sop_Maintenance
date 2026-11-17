@@ -61,8 +61,8 @@ def _subtitle(data, inline):
             return plan_guidance(data["include_locks"], any(p.get("read_only") for p in data.get("roundtrip", {}).get("products", [])))
         return "单位：辆。直接填车型月计划，填写值优先；清空并导回后恢复明细汇总。新增行填品牌和车型年款。锁单无需填写，合计自动计算。"
     if data.get("roundtrip"):
-        return "单位：辆。空白表示未填写，0表示明确不安排。年度合计为全年SOP；锁单行只读。"
-    return "单位：辆。空白表示未填写，0表示明确不安排。年度合计为全年SOP；带“锁单”字样的行为交车锁单数。"
+        return "单位：辆。空白表示未填写，0表示明确不安排。年份总计包含全年月份；锁单行只读。"
+    return "单位：辆。空白表示未填写，0表示明确不安排。年份总计包含全年月份；带“锁单”字样的行为交车锁单数。"
 
 
 def _layout(data):
@@ -82,7 +82,7 @@ def _layout(data):
                             "label": f"{int(month[-2:])}月", "historical": month < data["current_month"]})
             if month.endswith("-12"):
                 columns.append({"column": first_value + len(columns), "kind": "year_total",
-                                "year": year, "label": "年度合计"})
+                                "year": year, "label": f"{year}总计"})
         years.append({"year": year, "first_column": first,
                       "last_column": first_value + len(columns) - 1,
                       "full": len(year_months) == 12})
@@ -188,9 +188,6 @@ def _layout(data):
             return
         for item in columns:
             column = item["column"]
-            if item["kind"] == "year_total" and row["metric"] == "锁单数":
-                row["values"][column] = None
-                continue
             expected = _sum_known(child["values"][column] for child in children)
             if column in row["values"] and row["values"][column] != expected:
                 raise ValueError("车型 SOP 与版本明细不一致。")

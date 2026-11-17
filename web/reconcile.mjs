@@ -59,9 +59,12 @@ export function createReconcilePage({
   function showSelection() {
     const count = host.querySelector('[data-rec-selected-count]');
     if (count) count.textContent = '已选 ' + selectedRecords.size;
-    for (const button of host.querySelectorAll('[data-rec="confirm-selected"], [data-rec="exclude-selected"]')) {
+    for (const button of host.querySelectorAll('[data-rec="confirm-selected"], [data-rec="exclude-selected"], [data-rec="clear-selection"]')) {
       button.disabled = !canWrite() || !selectedRecords.size;
     }
+    const pageToggle = host.querySelector('[data-rec="select-page"]');
+    const checks = [...host.querySelectorAll('[data-rec-select]')];
+    if (pageToggle) pageToggle.textContent = checks.length && checks.every(check => check.checked) ? '取消本页' : '全选本页';
   }
 
   function emptyState(label, control = '') {
@@ -173,14 +176,16 @@ export function createReconcilePage({
       option('', '全部', sourceFilter) + detail.sources.map(source => option(source.id, source.name, sourceFilter)).join('') +
       '</select></label><span class="rec-count">' + records.length + ' 条</span><div class="rec-actions">' +
       '<span class="rec-count" data-rec-selected-count aria-live="polite">已选 ' + selectedRecords.size + '</span>' +
-      action('select-page', '选择本页', {write:true, disabled:!records.length}) +
+      action('select-page', rows.length && visiblePage(records).every(record => selectedRecords.has(record.id)) ? '取消本页' : '全选本页', {write:true, disabled:!records.length}) +
+      action('clear-selection', '清空选择', {write:true, disabled:!selectedRecords.size}) +
       action('confirm-selected', '确认所选', {primary:true, write:true, disabled:!selectedRecords.size}) +
       action('exclude-selected', '排除所选', {write:true, disabled:!selectedRecords.size}) + '</div></div>';
     if (status === 'pending' && !records.length) {
       if (sourceFilter && detail.records.some(record => record.status === 'pending')) {
         return filters + emptyState('该资料没有待确认记录', action('view', '查看全部待确认', {id:'records'}));
       }
-      return filters + emptyState('暂无待确认记录', action('view', '查看对账结果', {id:'results'}));
+      const hasIssues = detail.result?.issues?.length;
+      return filters + emptyState('暂无待确认记录', action('view', hasIssues ? '核对异常' : '查看对账结果', {id:hasIssues ? 'issues' : 'results'}));
     }
     return filters + table(['选择', '车型', '指标', '期间 / 库区', '数量', '核对状态', '原始资料', '操作'],
       rows, '没有符合条件的记录', {pinActions:true}) + pager(records.length);
@@ -254,7 +259,7 @@ export function createReconcilePage({
     const baseline = snapshot ? '基准快照 · ' + snapshot.label : 'SOP 基准 · ' + date(detail.baseline_at);
     const tools = '<div class="rec-row rec-filter"><span class="rec-count">' + esc(baseline) + '</span>' +
       '<div class="rec-actions">' + action('baseline', '更新基准', {write:true}) +
-      action('export', '导出 Excel') + action('summary', '例会摘要') + '</div></div>';
+      action('summary', '例会摘要') + '</div></div>';
     return tools + '<div class="rec-row rec-filter">' + toggles + picker + '</div>' + groupsTable();
   }
 
@@ -263,8 +268,8 @@ export function createReconcilePage({
     const steps = [
       ['sources', '资料收件箱', detail?.sources.length || 0, '份'],
       ['records', '待确认', pending, '条'],
-      ['results', '对账结果', detail?.result?.groups?.length || 0, '组'],
       ['issues', '异常核对', detail?.result?.issues?.length || 0, '项'],
+      ['results', '对账结果', detail?.result?.groups?.length || 0, '组'],
     ];
     return '<nav class="rec-steps" aria-label="对账流程">' + steps.map(([key, label, count, unit], index) => {
       const isCurrent = key === activeView;
@@ -285,7 +290,8 @@ export function createReconcilePage({
     const primary = '<div class="rec-row rec-toolbar">' + picker +
       (detail ? '<span class="rec-period">' + esc(detail.start_month === detail.end_month ? detail.start_month :
         detail.start_month + ' 至 ' + detail.end_month) + '</span>' : '') +
-      '<div class="rec-actions">' + action('new', '新建批次', {write:true}) + '</div></div>';
+      '<div class="rec-actions">' + action('new', '新建批次', {write:true}) +
+      (detail ? action('export', '导出Excel') : '') + '</div></div>';
     const activeView = detail ? view : 'sources';
     const panels = {sources:inbox, records:recordsTable, results:resultsTable, issues:issuesTable};
     host.innerHTML = primary + workflow(activeView) + '<section class="card rec-card">' + panels[activeView]() + '</section>';
@@ -576,10 +582,17 @@ export function createReconcilePage({
       else if (rec === 'confirm-selected') bulk('confirmed');
       else if (rec === 'exclude-selected') bulk('excluded');
       else if (rec === 'select-page') {
-        for (const check of host.querySelectorAll('[data-rec-select]')) {
-          check.checked = true;
-          selectedRecords.add(check.dataset.recSelect);
+        const checks = [...host.querySelectorAll('[data-rec-select]')];
+        const select = !checks.length || !checks.every(check => check.checked);
+        for (const check of checks) {
+          check.checked = select;
+          if (select) selectedRecords.add(check.dataset.recSelect);
+          else selectedRecords.delete(check.dataset.recSelect);
         }
+        showSelection();
+      } else if (rec === 'clear-selection') {
+        selectedRecords.clear();
+        for (const check of host.querySelectorAll('[data-rec-select]')) check.checked = false;
         showSelection();
       } else if (rec === 'view' || rec === 'result-filter') {
         if (rec === 'view') {

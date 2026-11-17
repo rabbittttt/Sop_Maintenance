@@ -368,12 +368,13 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                 elif path == "/api/products":
                     self._json(store.list_products())
                 elif path == "/api/plan-workbook/status" and workbook_sync:
+                    from sop import demand
                     try:
                         generation_view = store.generation_view()
                     except (ValidationError, MergeRuleError) as error:
                         generation_view = {"error": str(error)}
                     self._json({**workbook_sync.status(), "source_refresh": source_refresh.status(),
-                                "generation_view": generation_view})
+                                "generation_view": generation_view, "demand_revision": demand.revision(store)})
                 elif path == "/api/plan-workbook/download" and workbook_sync:
                     if workbook_sync.frontend_only:
                         raise ValidationError("请使用页面上的导出按钮下载计划表。")
@@ -468,7 +469,7 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                 if gateway and path == "/api/plan-workbook/open":
                     self._json({"error": "服务端不支持从浏览器打开服务器桌面文件，请下载副本。"}, 403)
                     return
-                limit = 17 * 1024 * 1024 if path == "/api/plans/import-xlsx" else MAX_REQUEST_BYTES
+                limit = 17 * 1024 * 1024 if path in {"/api/plans/import-xlsx", "/api/demand/import"} else MAX_REQUEST_BYTES
                 is_reconcile = path == "/api/reconcile" or path.startswith("/api/reconcile/")
                 if is_reconcile and path.rsplit("/", 1)[-1] in {"import", "restore"}:
                     from sop.reconcile import MAX_IMPORT_BYTES
@@ -485,6 +486,34 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                 elif path == "/api/write-access":
                     self._json({"canWrite": True})
                     return
+                elif path == "/api/demand/export":
+                    from sop import demand
+                    encoded, filename = demand.export_content(store, body)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    self.send_header("Content-Disposition", f"attachment; filename=demand-plan.xlsx; filename*=UTF-8''{quote(filename, safe='')}")
+                    self.send_header("Content-Length", str(len(encoded)))
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("X-Content-Type-Options", "nosniff")
+                    self.end_headers()
+                    self.wfile.write(encoded)
+                    return
+                elif path == "/api/demand/import":
+                    from sop import demand
+                    filename, content = body.get("filename"), body.get("content_base64")
+                    if not isinstance(filename, str) or len(filename) > 255 or not filename.lower().endswith(".xlsx"):
+                        raise ValidationError("仅支持 .xlsx 格式的要货计划表。")
+                    if not isinstance(content, str) or len(content) > 16 * 1024 * 1024:
+                        raise ValidationError("Excel 文件不能超过 12 MB。")
+                    try:
+                        decoded = base64.b64decode(content, validate=True)
+                    except (ValueError, binascii.Error):
+                        raise ValidationError("Excel 文件内容无效，请重新选择文件。")
+                    result = demand.import_content(store, decoded, base_revision=body.get("base_revision"),
+                                                   owner=actor or body.get("owner") or "Excel导入")
+                    if not result.get("ok"):
+                        self._json(result, 409)
+                        return
                 elif path == "/api/plans/export-xlsx":
                     if "row_product_ids" not in body:
                         raise ValidationError("当前页面的导出格式较旧，请按Ctrl+F5刷新看板后重试。无需勾选或填写版本明细。")

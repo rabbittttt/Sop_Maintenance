@@ -80,7 +80,7 @@ def validate_export(body):
     if len(rows) * (len(months) + len(years)) > MAX_QUANTITY_CELLS:
         raise ValidationError("导出数量单元格超过 300000 个，请缩小月份或版本范围。")
     if not isinstance(annual, list) or len(annual) != len(rows):
-        raise ValidationError("年度计划量必须与导出行一一对应。")
+        raise ValidationError("年度总计必须与导出行一一对应。")
     metric_column = 4 if body["include_versions"] else 3
     for index, row in enumerate(rows):
         if not isinstance(row, list) or len(row) != len(expected_headers):
@@ -97,11 +97,9 @@ def validate_export(body):
         _text(row[-1], "数据说明", 10000)
         totals = annual[index]
         if not isinstance(totals, dict) or set(totals) != years:
-            raise ValidationError("年度计划年份必须严格对应所选的12月。")
+            raise ValidationError("年度总计年份必须严格对应所选的12月。")
         for value in totals.values():
             _quantity(value)
-            if metric == "锁单数" and value is not None:
-                raise ValidationError("锁单行不能包含年度SOP计划量。")
     # A detached normalized payload prevents a caller from mutating it during rendering.
     return json.loads(json.dumps(body, ensure_ascii=False, allow_nan=False))
 

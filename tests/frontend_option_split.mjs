@@ -40,7 +40,7 @@ assert.match(app.innerHTML,/近28天覆盖 <strong>14\/28天<\/strong>/);
 assert.doesNotMatch(app.innerHTML,/data-option-dimension="地理区域"|data-option-generation="尊界 历史车型 2025款"/);
 const row=(generation,dimension,name)=>app.innerHTML.match(new RegExp(`<tr class="option-item-row[^>]*data-option-generation="${generation}"[^>]*data-option-dimension="${dimension}"[^>]*data-option-name="${name}"[^]*?<\\/tr>`))?.[0];
 assert.match(row('智界 R7 2026款','外观','红'),/60\.00%[^]*?<td class="number">60<\/td>/,'Use the source displayed ratio, not the inconsistent sample counts.');
-assert.match(app.innerHTML,/2026年年度计划量/, 'The source row remains in the calendar table.');
+assert.match(app.innerHTML,/2026总计/, 'The source row remains in the calendar table.');
 assert.match(app.innerHTML,/享界 X4 2026款汇总缺少直接来源/);
 assert.doesNotMatch(app.innerHTML,/data-option-generation="享界 X4 2026款汇总"[^]*?data-option-name="银"/,'Member ratios must not stand in for a missing summary source.');
 assert.match(app.innerHTML,/data-option-manual="true"[^]*?新版本/,'A manual version absent from the source remains visible.');

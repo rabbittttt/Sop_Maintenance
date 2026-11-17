@@ -142,8 +142,10 @@ class SOPStore:
 
     def _schema(self):
         from .committee import create_schema
+        from .demand import create_schema as create_demand_schema
 
         create_schema(self.db)
+        create_demand_schema(self.db)
         self.db.executescript("""
         CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS product_catalog (
@@ -829,6 +831,7 @@ class SOPStore:
 
     def state(self):
         from . import committee
+        from . import demand
 
         with self.lock:
             self.ensure_daily_snapshots()
@@ -847,6 +850,7 @@ class SOPStore:
             visible_ids = {p["id"] for p in data["products"]}
             plans = self.view_plans(data)
             data.update({
+                **demand.state(self),
                 "plans": plans,
                 "shipments": [dict(row) for row in self.db.execute("SELECT * FROM shipments ORDER BY product_id,month,source,batch") if row["product_id"] in visible_ids],
                 "settings": settings, "now": stamp(current), "current_month": month, "plan_end": end,
@@ -1328,7 +1332,7 @@ class SOPStore:
         cutoff_text = stamp(cutoff)
         operator = "<=" if inclusive else "<"
         rows = self.db.execute(f"SELECT * FROM events WHERE recorded_at {operator} ? ORDER BY id", (cutoff_text,)).fetchall()
-        state = {"plan": {}, "shipment": {}}
+        state = {"plan": {}, "shipment": {}, "demand": {}}
         for row in rows:
             state[row["entity"]][row["entity_key"]] = json.loads(row["after_json"])
         sales = self.db.execute(f"SELECT * FROM sales_versions WHERE recorded_at {operator} ? ORDER BY recorded_at DESC,id DESC LIMIT 1", (cutoff_text,)).fetchone()
@@ -1345,7 +1349,8 @@ class SOPStore:
         settings_row = self.db.execute(f"SELECT payload FROM settings_versions WHERE recorded_at {operator} ? ORDER BY recorded_at DESC,id DESC LIMIT 1", (cutoff_text,)).fetchone()
         settings = json.loads(settings_row["payload"]) if settings_row else {"bridge_m6": True, "zero_week_anchor": "month_week_majority"}
         snap_month = business_date.strftime("%Y-%m")
-        payload.update({"plans": list(state["plan"].values()), "shipments": list(state["shipment"].values()), "settings": settings})
+        payload.update({"plans": list(state["plan"].values()), "shipments": list(state["shipment"].values()),
+                        "demand_plans": list(state["demand"].values()), "settings": settings})
         rule_version = self.db.execute(f"SELECT signature,payload FROM generation_rules_versions WHERE recorded_at {operator} ? ORDER BY recorded_at DESC,id DESC LIMIT 1", (cutoff_text,)).fetchone()
         if rule_version:
             frozen_groups = json.loads(rule_version["payload"])

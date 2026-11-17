@@ -142,7 +142,7 @@ assert.doesNotMatch(rendered,/annual-heading|SOP计划 · M\+6|前5个月＋当�
 assert.match(rendered,/2026\.05/);
 assert.match(rendered,/2027\.04/);
 assert.doesNotMatch(rendered,/12个月合计/);
-assert.match(rendered,/2026年<span class="annual-caption">年度计划量/);
+assert.match(rendered,/2026总计/);
 const rollingHeaders=rendered.match(/<thead>[^]*?<\/thead>/)[0];
 assert.equal((rollingHeaders.match(/past-month/g)||[]).length,5);
 assert.deepEqual([...rollingHeaders.matchAll(/class="month-tag">([^<]+)</g)].map(m=>m[1]),['M-5','M-4','M-3','M-2','M-1','本月','M+1','M+2','M+3','M+4','M+5','M+6']);
@@ -177,7 +177,7 @@ const headers=[...rendered.match(/<thead>[^]*?<\/thead>/)[0].matchAll(/<th\b[^]*
 assert.equal(headers.length,15);
 assert.doesNotMatch(rendered,/<h1>|annual-heading/);
 assert.match(rendered,/value="2028" selected>2028年/);
-assert.match(rendered,/2028年合计/);
+assert.match(rendered,/2028总计/);
 assert.match(rendered,/Excel待同步/);
 assert.doesNotMatch(rendered,/class="stats"|历史锁单参考|品牌维护进度/);
 assert.equal(get('target'),'2028-01');
@@ -224,7 +224,8 @@ assert.match(get("calendarPlanCell([state.products[0]],'2026','sop')"),/<strong>
 assert.match(get("calendarPlanCell([state.products[1]],'2026','sop')"),/<strong>60<\/strong>/);
 const calendarLockCells=cellList(get("planMetricRow(state.products,'M5','model','g',months(),'locks')"));
 assert.equal(calendarLockCells.length,15);
-assert.match(calendarLockCells[10],/data-plan-year="2026"[^]*?<span class="missing">—<\/span>/);
+assert.match(calendarLockCells[10],/data-plan-year="2026"/);
+assert.doesNotMatch(calendarLockCells[10],/仅统计.*SOP/);
 const calendarHeaders=cellList(app.innerHTML.match(/<thead>[^]*?<\/thead>/)[0]);
 assert.equal(calendarHeaders.length,15);
 assert.match(calendarHeaders[9],/2026\.12/);

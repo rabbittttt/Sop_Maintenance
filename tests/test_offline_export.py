@@ -95,7 +95,9 @@ class OfflineExportTest(unittest.TestCase):
     def test_real_export_registers_and_imports_changed_plan(self):
         self.save("a", "2026-10", 10)
         self.save("a", "2026-11", 25)  # Outside the selected months, still in annual total.
-        context = self.generate(self.body())
+        body = self.body()
+        body["annual_plans"][0]["2026"] = 2500
+        context = self.generate(body)
         book = openpyxl.load_workbook(self.path, data_only=False)
         try:
             self.assertEqual(book.sheetnames, ["SOP计划", "_sop_import"])
@@ -106,9 +108,10 @@ class OfflineExportTest(unittest.TestCase):
             self.assertIn("A1:C1", {str(item) for item in sheet.merged_cells.ranges})
             self.assertIn("D1:F1", {str(item) for item in sheet.merged_cells.ranges})
             self.assertEqual(sheet["D4"].value, "10月")
-            self.assertEqual(sheet["F4"].value, "年度合计")
+            self.assertEqual(sheet["F4"].value, "2026总计")
             self.assertIn("A5:A12", {str(item) for item in sheet.merged_cells.ranges})
             self.assertEqual(sheet["D9"].value, 999)  # Model lock, not version sum.
+            self.assertEqual(sheet["F9"].value, 2500)  # Full year, including offscreen months.
             self.assertEqual(sheet["C7"].value, "V1")
             self.assertEqual(sheet["D7"].value, 10)
             self.assertTrue(sheet["F7"].data_type == "f")
@@ -122,6 +125,7 @@ class OfflineExportTest(unittest.TestCase):
         try:
             self.assertEqual(cached["SOP计划"]["F7"].value, 35)
             self.assertEqual(cached["SOP计划"]["D10"].value, 10)
+            self.assertEqual(cached["SOP计划"]["F11"].value, 2500)  # Brand lock total.
         finally:
             cached.close()
         edit_cell(self.path, "D7", 41)
@@ -131,6 +135,28 @@ class OfflineExportTest(unittest.TestCase):
         self.assertEqual(self.store.db.execute(
             "SELECT sop FROM plans WHERE product_id='a' AND month='2026-10'").fetchone()[0], 41)
         self.assertEqual(context["plan_values_by_product"]["a"]["2026-10"], 10)
+
+    def test_annual_lock_totals_and_red_plan_totals_for_both_detail_options(self):
+        from sop.export import validate_export
+        from sop.xlsx_export import write_export_workbook
+        from tests.test_export_workbook import payload
+
+        for versions in (False, True):
+            with self.subTest(versions=versions):
+                body = validate_export(payload(locks=True, versions=versions))
+                write_export_workbook({**body, "output_path": str(self.path)})
+                book = openpyxl.load_workbook(self.path, data_only=True)
+                try:
+                    sheet = book["SOP计划"]
+                    annual_column = 7 if versions else 6
+                    self.assertEqual(sheet.cell(4, annual_column).value, "2026总计")
+                    totals = {row[0].value: row[0].row for row in sheet if row[0].value in ("锁单总计", "总计")}
+                    self.assertEqual(sheet.cell(totals["锁单总计"], annual_column).value, 200)
+                    plan = sheet.cell(totals["总计"], annual_column)
+                    self.assertEqual(plan.value, 800)
+                    self.assertEqual(plan.font.color.rgb[-6:], "B62025")
+                finally:
+                    book.close()
 
     def test_first_web_template_creates_maintenance_only_after_successful_import(self):
         maintenance = self.root / "input_file" / "SOP计划维护.xlsx"
@@ -162,7 +188,7 @@ class OfflineExportTest(unittest.TestCase):
             self.assertEqual(sheet["A5"].value, "A")
             self.assertIn("A5:A6", {str(item) for item in sheet.merged_cells.ranges})
             self.assertEqual(sheet["C4"].value, "10月")
-            self.assertEqual(sheet["E4"].value, "年度合计")
+            self.assertEqual(sheet["E4"].value, "2026总计")
             self.assertFalse(sheet.protection.sheet)
             self.assertFalse(sheet["C5"].protection.locked)
             self.assertEqual(sheet["B5"].value, "M")
@@ -231,7 +257,7 @@ class OfflineExportTest(unittest.TestCase):
         try:
             sheet = book["SOP计划"]
             self.assertEqual([sheet.cell(4, col).value for col in range(4, 10)],
-                             ["11月", "12月", "年度合计", "1月", "12月", "年度合计"])
+                             ["11月", "12月", "2026总计", "1月", "12月", "2027总计"])
             self.assertEqual(sheet["F5"].value, 7)
             self.assertEqual(sheet["I5"].value, 9)
         finally:

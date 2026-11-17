@@ -34,7 +34,6 @@ function validate(data) {
     if (!['SOP计划量',...(data.include_locks?['锁单数']:[])].includes(row[metricIndex])) throw new Error(`Invalid metric at row ${index+1}`);
     const values=row.slice(monthsIndex,-1), annual=data.annual_plans[index];
     if (!values.every(quantity)||!annual||typeof annual!=='object'||Array.isArray(annual)||!same(Object.keys(annual).sort(),[...annualYears].sort())||!Object.values(annual).every(quantity)) throw new Error(`Invalid quantities at row ${index+1}`);
-    if (row[metricIndex]==='锁单数'&&Object.values(annual).some(v=>v!==null)) throw new Error('Annual SOP columns cannot contain lock counts');
     const productId=roundtrip?.row_product_ids[index]??null,annualKnown=roundtrip?.annual_known_counts[index];
     if(roundtrip) {
       if(row[0]==='版本明细'?(typeof productId!=='string'||!productId||productId.length>200):productId!==null)throw new Error('Roundtrip product identity must match the row level');
@@ -58,7 +57,7 @@ function makeLayout(data, parsed) {
     const first=firstValue+columns.length, months=data.months.filter(m=>m.startsWith(year+'-'));
     for(const month of months) {
       columns.push({column:firstValue+columns.length,kind:'month',month,sourceIndex:data.months.indexOf(month),label:Number(month.slice(-2))+'月',historical:month<data.current_month});
-      if(month.endsWith('-12'))columns.push({column:firstValue+columns.length,kind:'year_total',year,label:'年度合计'});
+      if(month.endsWith('-12'))columns.push({column:firstValue+columns.length,kind:'year_total',year,label:`${year}总计`});
     }
     years.push({year,first_column:first,last_column:firstValue+columns.length-1,full:months.length===12});
   }
@@ -114,7 +113,6 @@ function makeLayout(data, parsed) {
       return;
     }
     for(const col of columns) {
-      if(col.kind==='year_total'&&row.metric==='锁单数'){row.values[col.column]=null;continue;}
       const known=children.map(c=>c.values[col.column]).filter(v=>typeof v==='number');
       const expected=known.length?known.reduce((a,b)=>a+b,0):null;
       if(!quantity(expected))throw new Error('Combined export quantities exceed the safe integer range');
@@ -231,10 +229,10 @@ async function main() {
   }
   const write=(row,col,values)=>writeTo(sheet,row,col,values);
   const subtitle=layout.inline
-    ?(data.include_versions?planGuidance(data.include_locks,data.roundtrip.products.some(p=>p.read_only)):'单位：辆。当前为车型汇总，回填计划请导出版本明细。年度合计为全年SOP计划量。')
+    ?(data.include_versions?planGuidance(data.include_locks,data.roundtrip.products.some(p=>p.read_only)):'单位：辆。当前为车型汇总，回填计划请导出版本明细。年份总计包含全年月份。')
     :data.roundtrip
-    ?'单位：辆。空白表示未填写，0表示明确不安排。年度合计为全年SOP；锁单行只读。'+(data.include_versions?'修改月计划量后保存，在看板“导入Excel”回填。':'当前为车型汇总，只读；回填计划请导出版本明细。')
-    :'单位：辆。空白表示未填写，0表示明确不安排。年度合计为全年SOP；带“锁单”字样的行为交车锁单数。导出副本不参与计划同步。';
+    ?'单位：辆。空白表示未填写，0表示明确不安排。年份总计包含全年月份；锁单行只读。'+(data.include_versions?'修改月计划量后保存，在看板“导入Excel”回填。':'当前为车型汇总，只读；回填计划请导出版本明细。')
+    :'单位：辆。空白表示未填写，0表示明确不安排。年份总计包含全年月份；带“锁单”字样的行为交车锁单数。导出副本不参与计划同步。';
   setupPlanSheet(sheet,{lastColumn:layout.lastColumn,visibleLastColumn:layout.width,lastRow:layout.lastRow,identityColumns:layout.identity.length,columns:layout.columns});
   if(layout.inline&&layout.width<=6) {
     sheet.getRange('A2:'+last+'2').format={wrapText:true,rowHeight:layout.width<=4?58:44};

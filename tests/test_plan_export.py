@@ -37,6 +37,11 @@ def fixture_writer(body):
 
 
 class ExportValidationTest(unittest.TestCase):
+    def test_accepts_full_year_lock_totals(self):
+        body = payload()
+        body["annual_plans"][0]["2026"] = 500
+        self.assertEqual(validate_export(body)["annual_plans"][0]["2026"], 500)
+
     def test_valid_preserves_zero_null_large_totals_and_literal_labels(self):
         body = payload()
         body["rows"][1][5] = MAX_SAFE_INTEGER
@@ -74,7 +79,7 @@ class ExportValidationTest(unittest.TestCase):
         body = payload(); body["include_locks"] = False; variants.append(body)
         body = payload(); body["annual_plans"] = []; variants.append(body)
         body = payload(); body["annual_plans"][1] = {"2027": 999}; variants.append(body)
-        body = payload(); body["annual_plans"][0] = {"2026": 0}; variants.append(body)
+        body = payload(); body["annual_plans"][0] = {"2026": -1}; variants.append(body)
         body = payload(); body["output_path"] = "C:/do-not-write.xlsx"; variants.append(body)
         for body in variants:
             with self.subTest(body=body), self.assertRaises(ValidationError):

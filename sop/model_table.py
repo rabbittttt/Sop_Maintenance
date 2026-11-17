@@ -75,12 +75,13 @@ def _early_label_merges(sheet, first_data_row):
             yield (1 if match.group(1) == "A" else 2), int(match.group(2)), int(match.group(3))
 
 
-def parse_model_table(sheet):
+def parse_model_table(sheet, *, metric_labels=None, skip_other_metrics=False):
     """Return model-level plan entries from a visible, unmarked main table.
 
     Empty month cells have no update meaning. No row absence, subtotal, version
     label or hidden product identifier can deactivate or select a stored item.
     """
+    metric_labels = metric_labels or {"SOP计划量", "SOP计划", "计划量"}
     if ((sheet.max_row or 0) > MAX_ROWS or (sheet.max_column or 0) > MAX_COLUMNS
             or (sheet.max_row or 0) * (sheet.max_column or 0) > MAX_CELLS):
         raise ValidationError("车型计划表范围过大，请最多保留15000行、200列并缩小导入范围。")
@@ -212,6 +213,8 @@ def parse_model_table(sheet):
         brand, model = labels["brand"], labels["model"]
         level = _token(value(number, fields["层级"])) if "层级" in fields else ""
         metric = _token(value(number, fields["指标"])) if "指标" in fields else ""
+        if skip_other_metrics and metric and metric not in metric_labels:
+            continue
         if "锁单" in model or "锁单" in metric:
             continue
         if (not _MODEL_YEAR.search(model) and re.search(r"(?:合计|小计|总计)$", _token(model))
@@ -227,7 +230,7 @@ def parse_model_table(sheet):
             continue
         if not brand or not model:
             raise ValidationError(f"第{number}行请完整填写品牌和带年款的车型；普通空白单元格不会沿用上一行名称。")
-        if metric and metric not in {"SOP计划量", "SOP计划", "计划量"}:
+        if metric and metric not in metric_labels:
             raise ValidationError(f"第{number}行指标不是SOP计划量，请只保留车型月计划行。")
         model = re.sub(r"\s+合计$", "", model).strip()
         if not _MODEL_YEAR.search(model):

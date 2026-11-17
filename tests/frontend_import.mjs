@@ -7,7 +7,7 @@ const definitions=source.split("document.addEventListener('click'")[0];
 const requests=[],messages=[];
 let readCount=0,readFailure=false,refreshes=0,responseHandler;
 const context=vm.createContext({
-  localStorage:{getItem:()=>null},
+  localStorage:{getItem:()=>null,setItem:()=>{}},
   fetch:async(url,options)=>{requests.push({url,body:JSON.parse(options.body),options});return responseHandler();},
   FileReader:class {
     readAsDataURL(file){readCount++;if(readFailure)return this.onerror();this.result=`data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${file.encoded||'dGVzdA=='}`;this.onload();}
@@ -76,12 +76,12 @@ class Element {
   get innerHTML(){return this.html;}
 }
 function setupDialog(){
-  const ids=['import-plan-form','import-plan-file','import-save','import-error','import-progress','import-conflicts','edit-dialog'];
+  const ids=['excel-kind','demand-recheck','import-plan-form','import-plan-file','import-save','import-error','import-progress','import-conflicts','edit-dialog'];
   const map=new Map(ids.map(id=>['#'+id,new Element()]));
   const form=map.get('#import-plan-form'),input=map.get('#import-plan-file'),save=map.get('#import-save'),conflicts=map.get('#import-conflicts'),dialog=map.get('#edit-dialog');
   Object.defineProperty(input,'value',{get(){return this.fileValue||'';},set(value){this.fileValue=value;if(value==='')this.files=[];}});
   const close=new Element(),cancel=new Element();save.disabled=true;conflicts.conflictContainer=true;conflicts.choices=[];conflicts.maintenanceChoices=[];
-  form.querySelectorAll=selector=>{assert.equal(selector,'input,button');return[input,save,cancel,...conflicts.choices,...conflicts.maintenanceChoices];};
+  form.querySelectorAll=selector=>{assert.equal(selector,'input,select,button');return[input,save,cancel,...conflicts.choices,...conflicts.maintenanceChoices];};
   conflicts.querySelectorAll=selector=>{assert.ok(['[data-import-choice]','[data-maintenance-choice]'].includes(selector));return selector==='[data-import-choice]'?conflicts.choices:conflicts.maintenanceChoices;};
   dialog.querySelector=selector=>{assert.equal(selector,'[data-close]');return close;};
   context.document={querySelector:selector=>map.get(selector)||null};
@@ -246,3 +246,31 @@ assert.match(messages.at(-1).text,/已导入 1 项计划.*页面刷新失败.*Ex
 assert.doesNotMatch(messages.at(-1).text,/导入失败/);
 
 console.log('PASS: import validation, upload, loading, duplicate prevention, accessible errors, conflict choices, maintenance conflict separation, validation re-selection with corrected bytes, writeback warning, and safe retry.');
+
+ui=setupDialog();
+run("state.demand_revision=10;importPlans('demand')");chooseFile(ui);
+responseHandler=()=>({ok:false,status:409,json:async()=>({error:'要货计划已被其他人更新'})});
+await ui.form.onsubmit(submitEvent);
+assert.equal(requests.at(-1).url,'/api/demand/import');
+assert.equal(requests.at(-1).body.base_revision,10);
+assert.equal(ui.save.hidden,true);
+assert.equal(ui.input.files[0],context.validFile);
+run('load=async()=>{state.demand_revision=11}');
+const beforeRecheck=requests.length;
+await context.document.querySelector('#demand-recheck').onclick();
+assert.equal(requests.length,beforeRecheck,'Refresh must not silently overwrite another user’s changes.');
+assert.equal(ui.save.hidden,false);
+responseHandler=()=>({ok:true,json:async()=>({ok:true,imported:1})});
+await ui.form.onsubmit(submitEvent);
+assert.equal(requests.at(-1).body.base_revision,11);
+assert.equal(ui.dialog.open,false);
+assert.equal(run('showDemand'),true);
+console.log('PASS: demand import routing, preserved file on conflict, explicit recheck and updated revision.');
+
+ui=setupDialog();run("importPlans('demand')");chooseFile(ui);
+responseHandler=()=>({ok:false,status:409,json:async()=>({error:'请重新导出并核对该月份。',reload_workbook:true})});
+await ui.form.onsubmit(submitEvent);
+assert.equal(ui.input.files.length,0);
+assert.equal(ui.save.disabled,true);
+assert.match(ui.error.textContent,/重新导出/);
+assert.doesNotMatch(ui.conflicts.innerHTML,/demand-recheck/);
