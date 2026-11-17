@@ -1,7 +1,7 @@
 @echo off
 setlocal
 chcp 65001 >nul
-title SOP计划管理
+title SOP管理
 cd /d "%~dp0"
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0start-sop.ps1" %*
 set "SOP_EXIT_CODE=%ERRORLEVEL%"
