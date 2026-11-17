@@ -33,7 +33,7 @@ def source_directory(root):
 
 
 def runtime_data_directory(root):
-    return project_path(root, os.environ["SOP_DATA_DIR"]) if os.environ.get("SOP_DATA_DIR") else Path(root) / "data"
+    return project_path(root, os.environ["SOP_DATA_DIR"]) if os.environ.get("SOP_DATA_DIR") else persistent_directory(root)
 
 
 def plan_workbook_path(root):
@@ -52,3 +52,13 @@ def sales_source_files(source_dir):
         and path.name.casefold() != PLAN_WORKBOOK_NAME.casefold()
         and not path.name.lower().endswith(".pending.xlsx")
     )
+
+
+def persistent_directory(root):
+    root = Path(root).resolve()
+    value = os.environ.get("PLANHUB_DATA_ROOT", "").strip()
+    base = (root / value).resolve() if value else root.parent / "工作台数据"
+    destination = base / "database" / "sop"
+    if not destination.exists() and (root / "data" / "sop.sqlite3").exists():
+        raise RuntimeError("旧持久数据尚未迁移，请先停止服务并运行门户的数据迁移工具；不会创建空库。")
+    return destination

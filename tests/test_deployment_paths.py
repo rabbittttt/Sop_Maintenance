@@ -78,7 +78,7 @@ class DeploymentPathsTest(unittest.TestCase):
             self.assertFalse(explicit.exists())
             self.assertFalse(deployed.exists())
 
-    def test_shared_inputs_and_plan_leave_runtime_data_in_the_project(self):
+    def test_shared_inputs_and_plan_use_central_runtime_data(self):
         with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {}, clear=True):
             root = Path(folder).resolve() / 'SOP看板'
             shared = Path(folder).resolve() / '共享数据'
@@ -88,7 +88,7 @@ class DeploymentPathsTest(unittest.TestCase):
             # A missing category must not silently select stale project inputs.
             self.assertEqual(source_directory(root), shared / '订单汇总')
             self.assertEqual(plan_workbook_path(root), shared / 'SOP计划' / 'SOP计划维护.xlsx')
-            self.assertEqual(runtime_data_directory(root), root / 'data')
+            self.assertEqual(runtime_data_directory(root), root.parent / '工作台数据' / 'database' / 'sop')
             configured = Path(folder) / 'configured-shared'
             with patch.dict(os.environ, {'SHARED_DATA_ROOT': str(configured)}):
                 self.assertEqual(source_directory(root), configured / '订单汇总')
