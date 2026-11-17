@@ -17,7 +17,8 @@ def project_path(root, value):
 def _shared_data_root(root):
     if os.environ.get("SHARED_DATA_ROOT"):
         return project_path(root, os.environ["SHARED_DATA_ROOT"])
-    shared_root = Path(root).resolve().parent / "共享数据"
+    base = project_path(root, os.environ["PLANHUB_DATA_ROOT"]) if os.environ.get("PLANHUB_DATA_ROOT") else Path(root).resolve().parent / "工作台数据"
+    shared_root = base / "shared"
     if shared_root.exists():
         if not shared_root.is_dir():
             raise NotADirectoryError(f"共享数据根路径不是目录：{shared_root}")

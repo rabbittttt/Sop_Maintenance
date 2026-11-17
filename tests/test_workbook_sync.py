@@ -185,8 +185,8 @@ class WorkbookSyncTest(unittest.TestCase):
 
     def test_shared_plan_writes_do_not_create_a_project_input_copy(self):
         project = self.root / "SOP看板"
-        shared = self.root / "共享数据"
-        shared.mkdir()
+        shared = self.root / "工作台数据" / "shared"
+        shared.mkdir(parents=True)
         with patch.dict(os.environ, {}, clear=True):
             self.path = plan_workbook_path(project)
         self.sync = WorkbookSync(self.store, self.path, writer=fixture_writer, auto_create=False)

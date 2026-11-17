@@ -26,9 +26,9 @@ class DeploymentPathsTest(unittest.TestCase):
             previous = Path.cwd()
             try:
                 os.chdir(elsewhere)
-                with patch.dict(os.environ, {'SHARED_DATA_ROOT': '../共享数据'}):
-                    self.assertEqual(source_directory(root), parent / '共享数据' / '订单汇总')
-                    self.assertEqual(plan_workbook_path(root), parent / '共享数据' / 'SOP计划' / 'SOP计划维护.xlsx')
+                with patch.dict(os.environ, {'SHARED_DATA_ROOT': '../工作台数据/shared'}):
+                    self.assertEqual(source_directory(root), parent / '工作台数据' / 'shared' / '订单汇总')
+                    self.assertEqual(plan_workbook_path(root), parent / '工作台数据' / 'shared' / 'SOP计划' / 'SOP计划维护.xlsx')
                 with patch.dict(os.environ, {'SOP_SOURCE_DIR': '../sales', 'SOP_PLAN_DIR': '../plans',
                                             'SOP_DATA_DIR': './state', 'SOP_SHARED_CONFIG': '../rules.py'}), \
                      patch.object(sop_source_rules, 'PROJECT_ROOT', root):
@@ -81,10 +81,10 @@ class DeploymentPathsTest(unittest.TestCase):
     def test_shared_inputs_and_plan_use_central_runtime_data(self):
         with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {}, clear=True):
             root = Path(folder).resolve() / 'SOP看板'
-            shared = Path(folder).resolve() / '共享数据'
+            shared = Path(folder).resolve() / '工作台数据' / 'shared'
             self.assertEqual(source_directory(root), root / 'input_file')
             self.assertEqual(plan_workbook_path(root), root / 'input_file' / 'SOP计划维护.xlsx')
-            shared.mkdir()
+            shared.mkdir(parents=True)
             # A missing category must not silently select stale project inputs.
             self.assertEqual(source_directory(root), shared / '订单汇总')
             self.assertEqual(plan_workbook_path(root), shared / 'SOP计划' / 'SOP计划维护.xlsx')

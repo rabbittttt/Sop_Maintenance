@@ -22,9 +22,9 @@ class ImportMaintenanceFileTest(unittest.TestCase):
         self.addCleanup(self.f.doCleanups)
         self.project = self.f.root / "SOP维护"
         self.project.mkdir()
-        self.shared = self.f.root / "共享数据"
-        self.shared.mkdir()
-        environment = patch.dict(os.environ, {"SHARED_DATA_ROOT": "../共享数据", "SOP_PLAN_DIR": ""})
+        self.shared = self.f.root / "工作台数据" / "shared"
+        self.shared.mkdir(parents=True)
+        environment = patch.dict(os.environ, {"SHARED_DATA_ROOT": "../工作台数据/shared", "SOP_PLAN_DIR": ""})
         environment.start()
         self.addCleanup(environment.stop)
         self.path = plan_workbook_path(self.project)
