@@ -625,6 +625,8 @@ function planMetricRow(ps,label,level,id,visibleMonths,field,{isOpen=false,showN
   if(modelDraft&&showName)labelContent=gridModelLabel(id,isOpen);
   if(gridDraft&&level==='brand'&&showName)labelContent+=button('新增车型','grid-add','small grid-brand-add',`data-new-model-brand="${esc(id)}"${id?` aria-label="新增车型（${esc(id)}）"`:''}${gridLocked()?' disabled':''}`);
   if(!gridDraft&&level!=='total'&&showName)labelContent+=hiddenControl(level,id,one?`${p.model} · ${p.version}`:label);
+  const nameCell=showName?`<th scope="row" class="sticky-name"${rowSpan>1?` rowspan="${rowSpan}"`:''}>${labelContent}</th>`:'';
+  if(field==='demand')return demandRow(ps,level,visibleMonths,nameCell,cls);
   const cells=visibleMonths.map(m=>{
     const past=m<state.current_month?' past-month':'';
     let cell;
@@ -649,7 +651,6 @@ function planMetricRow(ps,label,level,id,visibleMonths,field,{isOpen=false,showN
     }
     return cell+(range==='rolling'&&m.endsWith('-12')?calendarPlanCell(ps,m.slice(0,4),field,!one):'');
   }).join('');
-  const nameCell=showName?`<th scope="row" class="sticky-name"${rowSpan>1?` rowspan="${rowSpan}"`:''}>${labelContent}</th>`:'';
   return `<tr class="${cls} ${isLock?'metric-lock-row':'metric-plan-row'}${!one&&showName?' summary-start':''}${blockStart?' metric-block-start':''}" data-plan-metric="${field}"${one?` data-version="${esc(p.id)}"`:''}>${nameCell}<td class="sticky-metric"><span class="metric-label ${isLock?'lock-label':'plan-label'}">${isLock?'锁单数':'SOP计划量'}</span></td>${cells}${range==='rolling'?'':annualCell(ps,visibleMonths,field,'',!one)}</tr>`;
 }
 function committeeRows(modelKey,visibleMonths,levels=visibleCommitteeLevels()) {
@@ -678,18 +679,18 @@ function demandQuantity(ps,month) {
   const values=[...groups.values()].map(valueFor).filter(v=>v!=null);
   return values.length?values.reduce((sum,v)=>sum+v,0):null;
 }
-function demandRow(ps,level,visibleMonths) {
+function demandRow(ps,level,visibleMonths,nameCell='',rowClass='') {
   const yearly=year=>{const values=yearMonths(year).map(m=>demandQuantity(ps,m)).filter(v=>v!=null);return `<td class="annual-total number calendar-plan">${values.length?fmt(values.reduce((sum,v)=>sum+v,0)):''}</td>`;};
-  const cls=level==='total'?'total-row':level==='brand'?'group-row':'model-row';
+  const cls=rowClass||(level==='total'?'total-row':level==='brand'?'group-row':'model-row');
   const cells=visibleMonths.map(m=>`<td class="number${m<state.current_month?' past-month':''}">${fmt(demandQuantity(ps,m))}</td>${range==='rolling'&&m.endsWith('-12')?yearly(m.slice(0,4)):''}`).join('');
-  return `<tr class="${cls} metric-demand-row" data-plan-metric="demand"><td class="sticky-metric"><span class="metric-label">要货计划</span></td>${cells}${range==='rolling'?'':yearly(planYear)}</tr>`;
+  return `<tr class="${cls} metric-demand-row${nameCell?' summary-start':''}" data-plan-metric="demand">${nameCell}<td class="sticky-metric"><span class="metric-label">要货计划</span></td>${cells}${range==='rolling'?'':yearly(planYear)}</tr>`;
 }
 function planRow(ps,label,level,id,visibleMonths,isOpen=false) {
   const committeeLevelRows=level==='model'&&ps.length&&state.committee?visibleCommitteeLevels():[];
   const rowSpan=(showLocks?2:1)+(showDemand?1:0)+committeeLevelRows.length;
   const locks=showLocks?planMetricRow(ps,label,level,id,visibleMonths,'locks',{isOpen,rowSpan}):'';
-  return locks+planMetricRow(ps,label,level,id,visibleMonths,'sop',{isOpen,showName:!showLocks,rowSpan})+
-    (showDemand?demandRow(ps,level,visibleMonths):'')+
+  return locks+(showDemand?planMetricRow(ps,label,level,id,visibleMonths,'demand',{isOpen,showName:!showLocks,rowSpan}):'')+
+    planMetricRow(ps,label,level,id,visibleMonths,'sop',{isOpen,showName:!showLocks&&!showDemand,rowSpan})+
     (committeeLevelRows.length?committeeRows(id,visibleMonths,committeeLevelRows):'');
 }
 function planVersionRows(ps,visibleMonths) {

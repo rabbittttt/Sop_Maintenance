@@ -9,7 +9,7 @@
   --border: #e5e7ed;
   --border-strong: #ccd1dc;
   --focus: #59616d;
-  --sheet-header: #096ca9;
+  --sheet-header: var(--primary);
   --plan-total: #b42323;
   --primary: #2859f5;
   --primary-hover: #2049d4;
