@@ -8,6 +8,7 @@ import gzip
 import importlib
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 import mimetypes
 import os
 import signal
@@ -708,9 +709,13 @@ def main():
     stop, workers, store = threading.Event(), [], None
     try:
         args.data_dir.mkdir(parents=True, exist_ok=True)
+        log_dir = os.environ.get("SOP_LOG_DIR")
+        log_file = Path(log_dir) / "service.log" if log_dir else args.data_dir / "service.err.log"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024,
+                                           backupCount=3, encoding="utf-8")
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
-                            handlers=[logging.StreamHandler(), logging.FileHandler(
-                                args.data_dir / "service.err.log", encoding="utf-8")], force=True)
+                            handlers=[logging.StreamHandler(), file_handler], force=True)
         store = SOPStore(args.data_dir / "sop.sqlite3", args.data_dir / "sales.json")
         store.ensure_daily_snapshots()
         workbook_sync = WorkbookSync(store, args.plan_file, auto_create=False, frontend_only=True)
