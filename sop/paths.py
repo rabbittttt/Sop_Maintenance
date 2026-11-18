@@ -33,6 +33,13 @@ def source_directory(root):
     return shared_root / "订单汇总" if shared_root is not None else Path(root) / "input_file"
 
 
+def service_log_directory(root):
+    if os.environ.get("SOP_LOG_DIR"):
+        return project_path(root, os.environ["SOP_LOG_DIR"])
+    base = project_path(root, os.environ.get("PLANHUB_DATA_ROOT") or "../工作台数据")
+    return base / "logs" / "sop"
+
+
 def runtime_data_directory(root):
     return project_path(root, os.environ["SOP_DATA_DIR"]) if os.environ.get("SOP_DATA_DIR") else persistent_directory(root)
 

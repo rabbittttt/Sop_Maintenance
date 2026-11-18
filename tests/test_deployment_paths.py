@@ -8,7 +8,7 @@ from unittest.mock import patch
 from sop import data as sop_data
 from sop import source_rules as sop_source_rules
 import server
-from sop.paths import source_directory, runtime_data_directory, plan_workbook_path
+from sop.paths import source_directory, runtime_data_directory, service_log_directory, plan_workbook_path
 from sop.refresh import SalesRefresh
 from sop.source_rules import load_merge_rules
 
@@ -26,6 +26,9 @@ class DeploymentPathsTest(unittest.TestCase):
             previous = Path.cwd()
             try:
                 os.chdir(elsewhere)
+                self.assertEqual(service_log_directory(root), parent / '工作台数据/logs/sop')
+                with patch.dict(os.environ, {'SOP_LOG_DIR': '../custom/sop'}):
+                    self.assertEqual(service_log_directory(root), parent / 'custom/sop')
                 with patch.dict(os.environ, {'SHARED_DATA_ROOT': '../工作台数据/shared'}):
                     self.assertEqual(source_directory(root), parent / '工作台数据' / 'shared' / '订单汇总')
                     self.assertEqual(plan_workbook_path(root), parent / '工作台数据' / 'shared' / 'SOP计划' / 'SOP计划维护.xlsx')

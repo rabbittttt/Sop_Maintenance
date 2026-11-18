@@ -22,7 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from sop.paths import plan_workbook_path, runtime_data_directory, source_directory
+from sop.paths import plan_workbook_path, runtime_data_directory, service_log_directory, source_directory
 from sop.store import ConflictError, SOPStore, ValidationError
 from sop.workbook import WorkbookSync
 from sop.backup import SnapshotBackup
@@ -709,8 +709,7 @@ def main():
     stop, workers, store = threading.Event(), [], None
     try:
         args.data_dir.mkdir(parents=True, exist_ok=True)
-        log_dir = os.environ.get("SOP_LOG_DIR")
-        log_file = Path(log_dir) / "service.log" if log_dir else args.data_dir / "service.err.log"
+        log_file = service_log_directory(ROOT) / "service.log"
         log_file.parent.mkdir(parents=True, exist_ok=True)
         file_handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024,
                                            backupCount=3, encoding="utf-8")
