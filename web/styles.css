@@ -542,7 +542,9 @@ dialog .subtitle { margin-bottom: 23px; }
 .workspace { margin-left: 0; min-height: 0; flex: 1; }
 .app-header { display:flex; align-items:center; gap:20px; min-height:60px; padding:6px var(--gutter); border-bottom:1px solid var(--border); background:var(--surface); }
 .app-brand { display:flex; align-items:center; gap:8px; color:var(--navy); font-size:16px; font-weight:700; white-space:nowrap; }
-.app-brand .app-icon { display: block; width: 30px; height: 30px; flex: 0 0 30px; }
+.app-brand .app-icon { display: block; width: 30px; height: 30px; flex: 0 0 30px; filter: url("#sop-icon-theme"); }
+.app-icon-defs { position: absolute; }
+.app-icon-fill { flood-color: var(--primary); }
 .app-brand > strong { font-size: inherit; font-weight: inherit; }
 .top-nav { display:flex; align-items:center; gap:4px; min-width:0; }
 .top-nav .nav-item { justify-content:center; width:auto; min-height:40px; padding:0 12px; gap:7px; border-radius:10px; color:var(--muted); background:transparent; font-size:13px; white-space:nowrap; }
