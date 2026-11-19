@@ -1035,7 +1035,8 @@ input[aria-readonly="true"]{background:#f1f4f8;color:#4c5e73}
 }
 h1,
 .annual-heading h1,
-.app-brand { font-size: var(--type-title); }
+.app-brand { font-size: var(--type-title); gap: 8px; font-weight: 700; line-height: 1.15; letter-spacing: normal; }
+.app-brand .app-icon { width: 28px; height: 28px; flex-basis: 28px; }
 h2,
 .section-title,
 .card-title,
