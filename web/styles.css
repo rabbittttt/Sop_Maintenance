@@ -1132,3 +1132,7 @@ body,
   #app > :first-child, .access-status { margin-top: 0; }
   .access-status:not([hidden]) { margin-top: var(--dashboard-gap); }
 }
+
+.app-brand, .top-nav .nav-item, .brand-tab, .segmented button, .rec-segmented button {
+  font-family: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+}
