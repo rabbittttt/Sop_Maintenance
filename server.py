@@ -31,6 +31,7 @@ from sop.refresh import SalesRefresh
 from sop.source_rules import MergeRuleError
 from sop.gateway import GatewayConfig, GatewayError, attributed_body
 from sop.option_mix import OptionMixError, read_option_mix
+from sop import user_views
 
 ROOT = Path(__file__).resolve().parent
 LOGGER = logging.getLogger("sop")
@@ -343,6 +344,12 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                     self._json({"mode": "gateway" if gateway else "console",
                                 "user": self.gateway_user if gateway else console_user,
                                 "canWrite": gateway.allow_writes if gateway else True})
+                elif path == "/api/user-views":
+                    principal = self.gateway_user if gateway else console_user
+                    if principal:
+                        self._json(user_views.get_views(store, principal))
+                    else:
+                        self._json({"error": "无法确认当前 Windows 账号。"}, 403)
                 elif path == "/api/health":
                     health = {"app_id": "hima-sop", "launch_mode": "gateway" if gateway else getattr(self.server, "launch_mode", None)}
                     if not gateway:
@@ -467,6 +474,13 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                 return
             try:
                 path = self.application_path if gateway else urlparse(self.path).path
+                if path == "/api/user-views":
+                    principal = self.gateway_user if gateway else console_user
+                    if principal:
+                        self._json(user_views.update_views(store, principal, self._body(MAX_REQUEST_BYTES)))
+                    else:
+                        self._json({"error": "无法确认当前 Windows 账号。"}, 403)
+                    return
                 if gateway and path == "/api/plan-workbook/open":
                     self._json({"error": "服务端不支持从浏览器打开服务器桌面文件，请下载副本。"}, 403)
                     return

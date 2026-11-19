@@ -14,13 +14,36 @@ const initial={current_month:'2026-10',plan_end:'2027-12',now:'2026-10-29',meta:
     {product_id:'a',month:'2026-09',sop:15,revision:3}],
   sales:[],model_sales:[],shipments:[],workbook_sync:{status:'absent'}};
 let response=async()=>({ok:true,status:200,json:async()=>({ok:true,saved_count:1,created_count:1,deactivated_count:1})});
+const account='CORP\\operator',hiddenKey=`sop-hidden-rows-v1:${encodeURIComponent(account.toLowerCase())}`;
+const savedViews={views:[],active:''};
+const workingHidden=()=>JSON.parse(storage.get(hiddenKey)).hidden;
+async function handleViewRequest(body){
+  if(body){
+    assert.equal(body.owner,undefined,'The server resolves the account itself');
+    if(body.action==='save'){
+      const existing=savedViews.views.find(view=>view.name===body.name);
+      const view={id:existing?.id??randomUUID(),name:body.name,config:body.config};
+      savedViews.views=savedViews.views.filter(item=>item.id!==view.id).concat(view);
+      savedViews.active=view.id;
+    }else{
+      assert.equal(body.action,'select');
+      assert.ok(body.id===''||savedViews.views.some(view=>view.id===body.id));
+      savedViews.active=body.id;
+    }
+  }
+  return {ok:true,status:200,json:async()=>structuredClone(savedViews)};
+}
 const context=vm.createContext({document:{querySelector:s=>nodes.get(s)||null,querySelectorAll:()=>[]},
   localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v)},crypto:{randomUUID,getRandomValues:array=>randomFillSync(array)},clearTimeout(){},initial,
-  fetch:async(path,options)=>{requests.push({path,body:JSON.parse(options.body)});return response();}});
+  account,fetch:async(path,options)=>{
+    const body=options?.body?JSON.parse(options.body):undefined;
+    requests.push({path,body});
+    return path==='/api/user-views'?handleViewRequest(body):response();
+  }});
 const source=readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
 vm.runInContext(source.split("document.addEventListener('click'")[0],context);
 const run=code=>vm.runInContext(code,context),plain=value=>JSON.parse(JSON.stringify(value));
-run("let searchTimer;state=initial;owner='测试';indexData();toast=()=>{};openDialog=()=>{throw Error('unexpected modal')};");
+run("let searchTimer;state=initial;access.user=account;owner=account;viewStoreStatus='ready';indexData();toast=()=>{};openDialog=()=>{throw Error('unexpected modal')};");
 // HTTP intranet origins may expose getRandomValues but not randomUUID.
 run('crypto.randomUUID=undefined');
 assert.match(run('gridUUID()'),/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
@@ -31,8 +54,10 @@ assert.doesNotMatch(nodes.get('#app').innerHTML,/data-action="(?:sync-workbook|o
 assert.match(nodes.get('#app').innerHTML,/id="saved-table-view"/);
 assert.match(nodes.get('#app').innerHTML,/data-action="view-save"/);
 assert.match(nodes.get('#app').innerHTML,/data-action="rows-restore"/);
-nodes.get('#table-view-name').value='初始视图';run('saveTableView()');
-const originalView=JSON.parse(storage.get('sop-table-views-v1')).views[0];
+nodes.get('#table-view-name').value='初始视图';await run('saveTableView()');
+const originalView=structuredClone(savedViews.views[0]);
+assert.equal(requests.at(-1).path,'/api/user-views');
+assert.equal(storage.has('sop-table-views-v1'),false,'A named view is saved on the server');
 
 run('bulkPlan()');
 assert.doesNotMatch(nodes.get('#app').innerHTML,/id="grid-level"/);
@@ -100,34 +125,39 @@ assert.deepEqual(requests.at(-1).body,first);
 assert.equal(run('gridDraft'),null);
 assert.equal(run("rowHidden('version','b')"),true);
 assert.equal(initial.plans[0].sop,10,'Draft values must not mutate persisted state');
-assert.equal(JSON.parse(storage.get('sop-hidden-rows-v1'))['["detail","version","b"]'],'S9 2026款 · Ultra（已停用）');
-assert.deepEqual(JSON.parse(storage.get('sop-table-views-v1')).views[0],originalView,'Deletion must not change the named view snapshot');
-run('hiddenRows={};viewsRestored=false;restoreInitialView()');
+assert.equal(workingHidden()['["detail","version","b"]'],'S9 2026款 · Ultra（已停用）');
+assert.deepEqual(savedViews.views[0],originalView,'Deletion must not change the named view snapshot');
+await run('hiddenRows={};viewsRestored=false;restoreInitialView()');
 assert.equal(run("rowHidden('version','b')"),true,'Deletion hiding must survive reload even when the active named view predates it');
-run("delete hiddenRows[rowViewKey('version','b')];refreshHiddenRows();hiddenRows={};viewsRestored=false;restoreInitialView()");
+await run("delete hiddenRows[rowViewKey('version','b')];refreshHiddenRows();hiddenRows={};viewsRestored=false;restoreInitialView()");
 assert.equal(run("rowHidden('version','b')"),false,'Restoring an inactive row must survive reload');
 assert.equal(initial.plans[1].sop,20,'Restoring visibility must preserve historical data');
 
 // Named view stores hiding and filters; totals and export source remain intact.
 run("hiddenRows={};hideRow('version','a','S9 Max');range='annual';planYear='2026';brand='享界';");
-nodes.get('#table-view-name').value='重点车型';run('saveTableView()');
-assert.equal(JSON.parse(storage.get('sop-table-views-v1')).views.length,2);
-run("hiddenRows={};range='rolling';brand='';applyTableView()");
+nodes.get('#table-view-name').value='重点车型';await run('saveTableView()');
+assert.equal(savedViews.views.length,2);
+await run("hiddenRows={};range='rolling';brand='';applyTableView()");
 assert.equal(run("rowHidden('version','a')"),true);
 assert.equal(run('range'),'annual');
 assert.equal(run('brand'),'享界');
 assert.equal(run("sumPlan(products(),'2026-10','sop').value"),30);
 run("state.generation_view.mode='summary'");
-assert.doesNotThrow(()=>run('applyTableView()'),'Saved views remain usable after unifying the generation hierarchy.');
+await assert.doesNotReject(()=>run('applyTableView()'),'Saved views remain usable after unifying the generation hierarchy.');
 assert.equal(run('range'),'annual');assert.equal(run('brand'),'享界');
-run("state.generation_view.mode='detail';hiddenRows={};viewsRestored=false;restoreInitialView()");
+await run("state.generation_view.mode='detail';hiddenRows={};viewsRestored=false;restoreInitialView()");
 assert.equal(run("rowHidden('version','a')"),true);
-run('hiddenRows={};refreshHiddenRows();viewsRestored=false;restoreInitialView()');
+await run('hiddenRows={};refreshHiddenRows();viewsRestored=false;restoreInitialView()');
 assert.equal(run("rowHidden('version','a')"),false,'An explicitly empty working view must override an older named hiding snapshot');
 assert.equal(run('range'),'annual','Working visibility must not discard saved view filters');
-run('applyTableView()');
+await run('applyTableView()');
 assert.equal(run("rowHidden('version','a')"),true,'Explicitly applying the named view must restore its unchanged snapshot');
-assert.equal(JSON.parse(storage.get('sop-hidden-rows-v1'))['["detail","version","a"]'],'S9 Max');
+assert.equal(workingHidden()['["detail","version","a"]'],'S9 Max');
+// A view updated in another browser supersedes the working hiding for its old snapshot.
+savedViews.views.find(view=>view.id===savedViews.active).config.hidden={'["detail","version","b"]':'S9 Ultra'};
+await run('hiddenRows={};viewsRestored=false;restoreInitialView()');
+assert.equal(run("rowHidden('version','a')"),false);
+assert.equal(run("rowHidden('version','b')"),true);
 // Whole-model edits include hidden versions without affecting another year.
 run("state={...initial,products:[...initial.products,{...initial.products[0],id:'hidden',version:'Lite'}],plans:[...initial.plans,{product_id:'hidden',month:'2026-10',sop:5,revision:2}]};gridDraft=null;hiddenRows={};brand='';model='';query='';hideRow('version','hidden','Lite');indexData();bulkPlan()");
 run("gridChangeModel('享界|S9 2025款','model','S9 改名 2025款');gridRow(gridDraft.modelRows.get('享界|S9 2025款')).values['2026-10']='60'");

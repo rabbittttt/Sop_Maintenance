@@ -47,7 +47,7 @@ assert.equal(f.nodes.get('#grid-owner').value,'CORP\\member');
 assert.equal(f.controls[0].disabled,true);
 assert.equal(f.controls[1].disabled,true,'POST Excel generation is disabled during a global write pause');
 assert.equal(f.controls[2].disabled,true);
-assert.equal(f.controls[3].disabled,false,'Browser-only saved views remain available');
+assert.equal(f.controls[3].disabled,true,'Saving personal views follows the service write pause');
 assert.equal(f.controls[4].disabled,true);
 assert.equal(f.controls[5].disabled,true);
 assert.equal(f.controls[6].disabled,true);
@@ -61,6 +61,9 @@ assert.doesNotMatch(f.run("button('恢复隐藏行','rows-restore')"),/disabled/
 f.respond('/api/state',200,{products:[]});
 assert.deepEqual(plain(await f.run("api('/api/state')")),{products:[]});
 assert.equal(f.requests.at(-1).path,'/sop/api/state');
+f.respond('/api/user-views',200,{views:[],active:''});
+assert.equal(await f.run('fetchTableViews()'),true,'Existing personal views can be read during the write pause');
+assert.equal(f.requests.at(-1).path,'/sop/api/user-views');
 
 // Configured writes still require a successful request through the IIS method gate.
 f=fixture();
@@ -100,6 +103,8 @@ assert.match(f.nodes.get('#access-status').textContent,/无法确认/);
 f=fixture('/');f.respond('/api/session',404,{error:'not found'});await f.run('initializeAccess()');
 assert.equal(f.run('serviceBase'),'');assert.equal(f.run('access.canWrite'),true);
 assert.equal(f.run('owner'),'client-provided-owner');
+assert.equal(await f.run('fetchTableViews()'),false,'An editable owner label does not identify an account for personal views');
+assert.deepEqual(f.requests.map(request=>request.path),['/api/session']);
 assert.equal(f.nodes.get('#access-status').hidden,true);
 
 f=fixture('/');f.respond('/api/session',200,{mode:'console',user:'DESKTOP\\李晓',canWrite:true});

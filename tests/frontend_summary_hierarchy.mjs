@@ -81,10 +81,10 @@ assert.doesNotMatch(app.innerHTML,/data-version="(standalone|a1|b1)"/);
 run("tableViews={active:'split',views:[{id:'split',name:'仅展开合并代际',config:viewConfig()}]};selectedView='split'");
 await run("handleAction('expand-generations',{})");
 assert.doesNotMatch(app.innerHTML,/R7 2025款/);
-run('applyTableView()');
+run("applyLoadedView('split');planning()");
 assert.match(app.innerHTML,/R7 2025款/);
 assert.doesNotMatch(app.innerHTML,/data-version="a1"/);
-run("const {bulkExpansion:ignoredBulk,rowExpansion:ignoredRows,...legacyExpansionView}=viewConfig();legacyExpansionView.allExpanded=true;legacyExpansionView.expanded=[];tableViews.views.push({id:'legacy-expanded',name:'旧展开视图',config:legacyExpansionView});selectedView='legacy-expanded';applyTableView()");
+run("const {bulkExpansion:ignoredBulk,rowExpansion:ignoredRows,...legacyExpansionView}=viewConfig();legacyExpansionView.allExpanded=true;legacyExpansionView.expanded=[];tableViews.views.push({id:'legacy-expanded',name:'旧展开视图',config:legacyExpansionView});applyLoadedView('legacy-expanded');planning()");
 assert.match(app.innerHTML,/data-version="a1"/);
 assert.match(app.innerHTML,/data-version="standalone"/);
 assert.match(run('viewControls()'),/<option value="legacy-expanded" selected/);
@@ -215,7 +215,7 @@ assert.equal(run("sumPlan(products(),'2026-10','sop').value"),110);
 
 // Previously saved single-generation views remain usable after unifying the hierarchy.
 context.legacyHidden=JSON.stringify(['detail','brand','智界']);
-run("tableViews={active:'legacy',views:[{id:'legacy',name:'原有视图',config:{generation_mode:'detail',hidden:{[legacyHidden]:'智界'},range:'rolling',showWenjie:true,showLocks:true,expanded:[]}}]};selectedView='legacy';applyTableView()");
+run("tableViews={active:'legacy',views:[{id:'legacy',name:'原有视图',config:{generation_mode:'detail',hidden:{[legacyHidden]:'智界'},range:'rolling',showWenjie:true,showLocks:true,expanded:[]}}]};applyLoadedView('legacy');planning()");
 assert.equal(run("tableViews.active"),'legacy');
 assert.equal(run("rowHidden('brand','智界')"),true);
 assert.equal(run("sumPlan(products(),'2026-10','sop').value"),110);

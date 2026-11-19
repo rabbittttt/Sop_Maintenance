@@ -143,9 +143,11 @@ class SOPStore:
     def _schema(self):
         from .committee import create_schema
         from .demand import create_schema as create_demand_schema
+        from .user_views import create_schema as create_user_view_schema
 
         create_schema(self.db)
         create_demand_schema(self.db)
+        create_user_view_schema(self.db)
         self.db.executescript("""
         CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS product_catalog (

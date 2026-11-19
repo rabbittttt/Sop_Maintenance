@@ -44,6 +44,13 @@ function fixture(mode='detail') {
 async function main() {
   await fs.mkdir(out,{recursive:true});
   let state=fixture(),failure='',savedRequests=[],exportRequest=null,stateRequests=0,loseResponse=false;
+  const mainAccount='CORP\\BrowserTest', otherAccount='CORP\\OtherTester';
+  let sessionAccount=mainAccount, viewSequence=0;
+  const viewsByAccount=new Map(), viewRequests=[];
+  const personalViews=()=>{
+    if(!viewsByAccount.has(sessionAccount))viewsByAccount.set(sessionAccount,{views:[],active:''});
+    return viewsByAccount.get(sessionAccount);
+  };
   const apiPaths=[];
   const completed=new Map();
   const browser=await chromium.launch({headless:true,channel:'msedge'});
@@ -52,10 +59,45 @@ async function main() {
     page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];
     page.on('pageerror',error=>errors.push(error.message));
     await page.addInitScript(()=>localStorage.setItem('sop-owner','浏览器测试'));
-    await page.route(`${origin}/**`,async route=>{
+    const routeApp=async route=>{
       const url=new URL(route.request().url());
       if(url.pathname.startsWith('/api/'))apiPaths.push(url.pathname);
-      if(url.pathname==='/api/session')return route.fulfill({json:{mode:'console',user:'',canWrite:true}});
+      if(url.pathname==='/api/session')return route.fulfill({json:{mode:'console',user:sessionAccount,canWrite:true}});
+      if(url.pathname==='/api/user-views'){
+        const record=personalViews();
+        if(route.request().method()==='GET')return route.fulfill({json:record});
+        const request=route.request().postDataJSON();
+        viewRequests.push({account:sessionAccount,request});
+        if(request.action==='save'){
+          const existing=record.views.find(view=>view.name===request.name);
+          const view=existing||{id:String(++viewSequence),name:request.name};
+          view.config=request.config;
+          if(!existing)record.views.push(view);
+          record.active=view.id;
+        }else if(request.action==='select'||request.action==='delete'){
+          if((request.id||request.action==='delete')&&!record.views.some(view=>view.id===request.id)){
+            return route.fulfill({status:404,json:{error:'视图不存在'}});
+          }
+          if(request.action==='select')record.active=request.id;
+          else{
+            record.views=record.views.filter(view=>view.id!==request.id);
+            if(record.active===request.id)record.active='';
+          }
+        }else if(request.action==='import'){
+          let imported=0;
+          for(const item of request.views){
+            if(record.views.some(view=>view.name===item.name))continue;
+            record.views.push({id:String(++viewSequence),name:item.name,config:item.config});
+            imported++;
+          }
+          const chosen=request.views.find(view=>view.id===request.active);
+          if(chosen&&!record.active)record.active=record.views.find(view=>view.name===chosen.name).id;
+          return route.fulfill({json:{...record,imported}});
+        }else{
+          return route.fulfill({status:400,json:{error:'未知视图操作'}});
+        }
+        return route.fulfill({json:record});
+      }
       if(url.pathname==='/api/state'){stateRequests++;return route.fulfill({json:state});}
       if(url.pathname==='/api/plan-workbook/status')return route.fulfill({json:{status:'absent',generation_view:state.generation_view}});
       if(url.pathname==='/api/settings') {
@@ -91,7 +133,8 @@ async function main() {
       const name=url.pathname==='/'?'index.html':url.pathname.slice(1);
       const contentType=name.endsWith('.js')?'application/javascript':name.endsWith('.css')?'text/css':name.endsWith('.svg')?'image/svg+xml':name.endsWith('.png')?'image/png':name.endsWith('.ico')?'image/x-icon':'text/html';
       return route.fulfill({body:await fs.readFile(path.join(root,'web',name)),contentType});
-    });
+    };
+    await page.route(`${origin}/**`,routeApp);
     await page.goto(origin+'/');
     if(!origin.includes('127.0.0.1')) {
       assert.equal(await page.evaluate(()=>window.isSecureContext),false,'Use real insecure HTTP browser semantics');
@@ -119,11 +162,25 @@ async function main() {
     };
     const openViews=async()=>assert.equal(await page.locator('#table-view-name').isVisible(),true);
     const cell=(id,month)=>page.locator(`[data-grid-id="${id}"][data-grid-month="${month}"]`);
+    const waitForViewWrite=()=>page.waitForResponse(response=>
+      new URL(response.url()).pathname==='/api/user-views'&&response.request().method()==='POST');
+    const saveNamedView=async name=>{
+      await page.locator('#table-view-name').fill(name);
+      const reply=waitForViewWrite();
+      await click('view-save');
+      assert.ok((await reply).ok());
+      await page.locator('[data-action="view-save"]:enabled').waitFor();
+    };
+    const resetViewFixture=async()=>{
+      viewsByAccount.delete(sessionAccount);
+      await page.evaluate(()=>localStorage.clear());
+    };
     await openViews();
-    await page.locator('#table-view-name').fill('初始视图');
-    await click('view-save');
+    await saveNamedView('初始视图');
     await click('bulk-plan');
     await page.locator('#grid-owner').waitFor();
+    assert.equal(await page.locator('#grid-owner').inputValue(),mainAccount);
+    assert.equal(await page.locator('#grid-owner').evaluate(input=>input.readOnly),true);
     assert.equal(await page.locator('#edit-dialog').evaluate(el=>el.open),false,'Batch edit must remain inside the main table');
     assert.equal(await cell('a','2026-10').inputValue(),'100');
     await cell('a','2026-10').fill('0');
@@ -209,8 +266,8 @@ async function main() {
     await page.locator('[data-hide-level="model"][data-hide-id="智界|R7 2026款"]').first().click();
     assert.equal(await page.locator('[data-version="x"]').count(),0);
     await openViews();
-    await page.locator('#table-view-name').fill('重点车型');
-    await click('view-save');
+    await saveNamedView('重点车型');
+    const mainViewId=personalViews().active;
     await page.reload();
     await page.locator('[data-action="bulk-plan"]').waitFor();
     assert.equal(await page.locator('[data-version="a"],[data-version="x"]').count(),0);
@@ -221,13 +278,76 @@ async function main() {
     assert.ok(await page.locator('[data-version="x"]').count()>0);
     assert.ok(await page.locator('[data-version="old"]').count()>0,'Restoring hidden rows reveals preserved inactive history');
     assert.equal(state.products.find(p=>p.id==='old').active,false,'Restoring visibility must not reactivate the product');
+    const selectReply=waitForViewWrite();
     await page.locator('#saved-table-view').selectOption({label:'重点车型'});
+    assert.ok((await selectReply).ok());
+    await page.locator('[data-version="a"],[data-version="x"],[data-version="old"]').first().waitFor({state:'detached'});
     assert.equal(await page.locator('[data-version="a"],[data-version="x"],[data-version="old"]').count(),0,'Applying a named view restores its saved hidden rows');
     await click('rows-restore');
 
+    // The same account gets its saved view in a fresh browser context.
+    const secondDevice=await browser.newPage({viewport:{width:1440,height:1000}});
+    try {
+      await secondDevice.route(`${origin}/**`,routeApp);
+      await secondDevice.goto(origin+'/');
+      await secondDevice.locator('[data-action="bulk-plan"]').waitFor();
+      assert.equal(await secondDevice.locator('#saved-table-view').inputValue(),mainViewId);
+      assert.equal(await secondDevice.locator('#table-view-name').inputValue(),'重点车型');
+      assert.equal(await secondDevice.locator('[data-version="a"],[data-version="x"],[data-version="old"]').count(),0);
+      assert.ok(await secondDevice.locator('[data-version="b"]').count()>0);
+    } finally {await secondDevice.close();}
+
+    // A different login on the existing browser gets a separate list and can reuse the same name.
+    sessionAccount=otherAccount;
+    await page.reload();
+    await page.locator('[data-action="bulk-plan"]').waitFor();
+    assert.equal(await page.locator('#owner-btn').innerText(),otherAccount);
+    assert.equal(await page.locator('#saved-table-view option').filter({hasText:'重点车型'}).count(),0);
+    await ensureVersionsExpanded();
+    assert.ok(await page.locator('[data-version="a"]').count()>0);
+    assert.ok(await page.locator('[data-version="x"]').count()>0);
+    await saveNamedView('重点车型');
+    assert.notEqual(personalViews().active,mainViewId);
+    const deleteReply=waitForViewWrite();
+    await click('view-delete');
+    assert.ok((await deleteReply).ok());
+    assert.equal(personalViews().views.length,0);
+    sessionAccount=mainAccount;
+    await page.reload();
+    await page.locator('[data-action="bulk-plan"]').waitFor();
+    assert.equal(await page.locator('#saved-table-view option').filter({hasText:'重点车型'}).getAttribute('value'),mainViewId);
+
+    // Old views only enter the current account after an explicit import and cannot replace a same-name view.
+    const beforeImport=structuredClone(personalViews().views.find(view=>view.id===mainViewId));
+    await page.evaluate(config=>localStorage.setItem('sop-table-views-v1',JSON.stringify({active:'old-local',views:[
+      {id:'old-local',name:'旧本机视图',config},
+      {id:'old-conflict',name:'重点车型',config:{...config,showLocks:false}},
+    ]})),beforeImport.config);
+    const writesBeforeImport=viewRequests.length;
+    await page.reload();
+    await page.locator('[data-action="view-import-local"]').waitFor();
+    assert.equal(viewRequests.length,writesBeforeImport);
+    assert.equal(await page.locator('#saved-table-view option').filter({hasText:'旧本机视图'}).count(),0);
+    const importReply=waitForViewWrite();
+    await click('view-import-local');
+    assert.ok((await importReply).ok());
+    await page.locator('[data-action="view-save"]:enabled').waitFor();
+    assert.deepEqual(personalViews().views.find(view=>view.id===mainViewId),beforeImport);
+    assert.ok(personalViews().views.some(view=>view.name==='旧本机视图'));
+    assert.equal(viewsByAccount.get(otherAccount).views.length,0);
+    await page.reload();
+    await page.locator('[data-action="view-save"]:enabled').waitFor();
+    assert.equal(await page.locator('[data-action="view-import-local"]').count(),0);
+    assert.equal(await page.locator('#saved-table-view option').filter({hasText:'旧本机视图'}).count(),1);
+    assert.deepEqual(viewRequests.filter(entry=>entry.request.action==='save').map(entry=>entry.account),
+      [mainAccount,mainAccount,otherAccount]);
+    assert.ok(viewRequests.every(({request})=>!['account','owner','user','principal'].some(key=>key in request)),
+      'Account identity comes from the session, never from a client-supplied field');
+    console.log('PASS: named views persist across browsers, isolate Windows accounts, allow separate same-name views and explicitly import older local views.');
+
     // Bulk expansion can show either layer of the hierarchy.
     state=fixture('summary');
-    await page.evaluate(()=>{localStorage.removeItem('sop-table-views-v1');localStorage.removeItem('sop-hidden-rows-v1');});
+    await resetViewFixture();
     await page.reload();
     await page.locator('[data-action="bulk-plan"]').waitFor();
     await click('expand-generations');
@@ -250,7 +370,7 @@ async function main() {
 
     // Model-year entry is the default; details survive zero and clear overrides.
     state=fixture();
-    await page.evaluate(()=>{localStorage.removeItem('sop-table-views-v1');localStorage.removeItem('sop-hidden-rows-v1');});
+    await resetViewFixture();
     await page.setViewportSize({width:1440,height:1000});
     await page.reload();
     await page.locator('[data-action="bulk-plan"]').waitFor();
@@ -321,7 +441,7 @@ async function main() {
 
     // A new installation with no catalog or maintenance Excel can add its first row directly.
     state={...fixture(),products:[],plans:[]};
-    await page.evaluate(()=>{localStorage.removeItem('sop-table-views-v1');localStorage.removeItem('sop-hidden-rows-v1');});
+    await resetViewFixture();
     await page.reload();
     await page.locator('[data-action="bulk-plan"]').waitFor();
     assert.equal(await page.locator('[data-action="bulk-plan"]').isEnabled(),true);
