@@ -1065,7 +1065,37 @@ body,
 .table-footer,
 .rec-table small { font-size: var(--type-note); }
 
-@media (max-width: 640px) {
-  .top-nav { overflow-x: auto; justify-content: flex-start; }
-  .top-nav .nav-item { flex: 1 0 auto; }
+/* Brand and actions share the first row. Keep navigation in its own scroll area. */
+.app-header { flex-wrap: wrap; gap: 6px 12px; }
+.top-nav {
+  flex: 0 1 100%; justify-content: flex-start; gap: 6px;
+  overflow-x: auto; scrollbar-width: thin;
+}
+.top-nav .nav-item { flex: 0 0 auto; flex-direction: row; }
+
+.top-nav .nav-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--type-body);
+  font-weight: 600;
+  line-height: 1.4;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: none;
+  transition: color 160ms, background-color 160ms;
+}
+.top-nav .nav-item:not(:disabled):hover { background: var(--bg); color: var(--navy); }
+.top-nav .nav-item.active:not(:disabled) { background: var(--blue-soft); color: var(--primary-hover); font-weight: 600; }
+.top-nav .nav-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.top-nav .nav-item svg { width: 18px; height: 18px; flex: 0 0 18px; color: inherit; opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .top-nav .nav-item { transition: none; }
 }
