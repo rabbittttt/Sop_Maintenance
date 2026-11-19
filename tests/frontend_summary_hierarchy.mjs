@@ -63,6 +63,33 @@ context.parent=parent;context.member=members[1];
 const parentKey=run('modelGroupKey(parent)'),memberKey=run('modelGroupKey(member)');
 assert.notEqual(parentKey,memberKey);
 context.parentKey=parentKey;context.memberKey=memberKey;
+
+// The two toolbar actions control separate levels of the same hierarchy.
+await run("handleAction('expand-versions',{})");
+assert.match(app.innerHTML,/data-version="standalone"/);
+assert.doesNotMatch(app.innerHTML,/R7 2025款|data-version="a1"/);
+await run("handleAction('expand-generations',{})");
+assert.match(app.innerHTML,/R7 2025款/);
+assert.match(app.innerHTML,/data-version="a1"/);
+run('toggleModel(memberKey)');
+assert.doesNotMatch(app.innerHTML,/data-version="a1"/);
+assert.match(app.innerHTML,/data-version="standalone"/);
+assert.match(app.innerHTML,/data-version="b1"/);
+await run("handleAction('expand-versions',{})");
+assert.match(app.innerHTML,/R7 2025款/);
+assert.doesNotMatch(app.innerHTML,/data-version="(standalone|a1|b1)"/);
+run("tableViews={active:'split',views:[{id:'split',name:'仅展开合并代际',config:viewConfig()}]};selectedView='split'");
+await run("handleAction('expand-generations',{})");
+assert.doesNotMatch(app.innerHTML,/R7 2025款/);
+run('applyTableView()');
+assert.match(app.innerHTML,/R7 2025款/);
+assert.doesNotMatch(app.innerHTML,/data-version="a1"/);
+run("const {bulkExpansion:ignoredBulk,rowExpansion:ignoredRows,...legacyExpansionView}=viewConfig();legacyExpansionView.allExpanded=true;legacyExpansionView.expanded=[];tableViews.views.push({id:'legacy-expanded',name:'旧展开视图',config:legacyExpansionView});selectedView='legacy-expanded';applyTableView()");
+assert.match(app.innerHTML,/data-version="a1"/);
+assert.match(app.innerHTML,/data-version="standalone"/);
+assert.match(run('viewControls()'),/<option value="legacy-expanded" selected/);
+run("bulkExpansion={versions:null,generations:null};rowExpansion.clear();tableViews={active:'',views:[]};selectedView='';planning()");
+
 run('toggleModel(parentKey)');
 assert.match(app.innerHTML,/R7 2025款/);
 assert.doesNotMatch(app.innerHTML,/data-version="a1"/,'Expanding the summary reveals members before versions.');

@@ -328,7 +328,7 @@ vm.runInContext(`
 `,screenContext);
 assert.match(screen.innerHTML,/data-action="toggle-locks" aria-pressed="false"/);
 assert.doesNotMatch(screen.innerHTML,/data-version="a"[^>]*data-plan-metric="locks"/);
-vm.runInContext("showLocks=true;expanded.add('问界|M5');planning()",screenContext);
+vm.runInContext("showLocks=true;rowExpansion.set('问界|M5',true);planning()",screenContext);
 assert.match(screen.innerHTML,/data-action="toggle-locks" aria-pressed="true"/);
 assert.match(screen.innerHTML,/版本锁单最新来源月：<strong>2026\.08<\/strong>/);
 assert.match(screen.innerHTML,/data-plan-metric="locks" data-version="a"[^]*?版本原值">33<\/td>/);

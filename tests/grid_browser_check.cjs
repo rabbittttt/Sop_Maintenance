@@ -15,11 +15,12 @@ function fixture(mode='detail') {
     generation:brand+' '+model,source_generation:brand+' '+model,source_generations:[brand+' '+model],
     revision:1,active:true,start_month:'2026-01',end_month:null});
   const members=[product('a','享界','S9 2026款','Max'),product('b','享界','S9 2026款','Ultra')];
-  return {current_month:'2026-10',plan_end:'2027-12',now:'2026-10-29T12:00:00+08:00',
+  const summaryGeneration='享界 X4 2026款汇总';
+  const data={current_month:'2026-10',plan_end:'2027-12',now:'2026-10-29T12:00:00+08:00',
     settings:{generation_mode:mode},generation_view:{mode,rule_signature:'fixture-rules',warnings:[]},
     meta:{quality:[],metrics:[]},workbook_sync:{status:'absent',message:'未建立维护表'},
     products:[product('x','智界','R7 2026款','Pro'),product('old','享界','S9 2024款','Max'),
-      ...(mode==='summary'?[{...product('group','享界','X4 2026款','Max'),read_only:true,member_product_ids:['a','b']}]:members),
+      ...(mode==='summary'?[{...product('group','享界','X4 2026款','Max'),read_only:true,summary_generation:summaryGeneration,member_product_ids:['a','b']}]:members),
       product('w','问界','M5 2025款','Max')],
     plans:[{product_id:'a',month:'2026-10',sop:100,forecast:111,revision:1},
       {product_id:'a',month:'2026-11',sop:150,forecast:160,revision:1},
@@ -29,6 +30,15 @@ function fixture(mode='detail') {
       {product_id:'w',month:'2026-10',sop:40,forecast:44,revision:1},
       {product_id:'group',month:'2026-10',sop:300,forecast:331,revision:0}],
     sales:[],model_sales:[],shipments:[],history_months:['2026-07','2026-08','2026-09']};
+  if(mode==='summary'){
+    const ids=new Set(members.map(member=>member.id));
+    data.generation_members={
+      products:members.map(member=>({...member,parent_generation:summaryGeneration})),
+      plans:data.plans.filter(plan=>ids.has(plan.product_id)),
+    };
+    data.plans=data.plans.filter(plan=>!ids.has(plan.product_id));
+  }
+  return data;
 }
 
 async function main() {
@@ -96,8 +106,17 @@ async function main() {
     assert.equal(await page.locator('#table-view-name').isVisible(),true);
     assert.equal(await page.locator('[data-action="view-save"]').isVisible(),true);
     assert.equal(await page.locator('[data-action="rows-restore"]').isVisible(),true);
+    assert.deepEqual(await page.locator('.display-toggles button').allTextContents(),
+      ['显示锁单','显示要货计划','显示问界','展开版本','展开合并代际']);
     await page.screenshot({path:path.join(out,'direct-web-maintenance.png'),fullPage:true});
-    const click=async action=>{await page.locator(`[data-action="${action}"]`).click();if(action==='bulk-plan'&&!await page.evaluate(()=>allExpanded))await page.locator('[data-action="expand-all"]').click();};
+    const expandVersions = page.locator('[data-action="expand-versions"]');
+    const ensureVersionsExpanded = async () => {
+      if (await expandVersions.getAttribute('aria-expanded') !== 'true') await expandVersions.click();
+    };
+    const click=async action=>{
+      await page.locator(`[data-action="${action}"]`).click();
+      if(action==='bulk-plan') await ensureVersionsExpanded();
+    };
     const openViews=async()=>assert.equal(await page.locator('#table-view-name').isVisible(),true);
     const cell=(id,month)=>page.locator(`[data-grid-id="${id}"][data-grid-month="${month}"]`);
     await openViews();
@@ -158,7 +177,7 @@ async function main() {
     assert.equal(await page.locator('[data-version="old"]').count(),0,'Deleted row is hidden after saving');
     await page.reload();
     await page.locator('[data-action="bulk-plan"]').waitFor();
-    await click('expand-all');
+    await ensureVersionsExpanded();
     assert.equal(await page.locator('[data-version="old"]').count(),0,'Deleted row stays hidden after page reload');
     console.log('PASS: draft editing, validation, conflict recovery and uncertain-response retry.');
 
@@ -182,7 +201,7 @@ async function main() {
 
     // Hide versions/models, preserve totals, save and reload the named view.
     const hiddenBefore=Number((await page.locator('[data-action=rows-restore]').innerText()).match(/（(\d+)）/)?.[1]||0);
-    if(!await page.locator('[data-hide-level="version"][data-hide-id="a"]').count())await click('expand-all');
+    await ensureVersionsExpanded();
     const totalBefore=await page.locator('tr.total-row.metric-plan-row').innerText();
     await page.locator('[data-hide-level="version"][data-hide-id="a"]').first().click();
     assert.equal(await page.locator('[data-version="a"]').count(),0);
@@ -206,16 +225,28 @@ async function main() {
     assert.equal(await page.locator('[data-version="a"],[data-version="x"],[data-version="old"]').count(),0,'Applying a named view restores its saved hidden rows');
     await click('rows-restore');
 
-    // A summary view must keep derived rows read-only even in grid mode.
-    await page.locator('#generation-filter').selectOption('summary');
+    // Bulk expansion can show either layer of the hierarchy.
+    state=fixture('summary');
+    await page.evaluate(()=>{localStorage.removeItem('sop-table-views-v1');localStorage.removeItem('sop-hidden-rows-v1');});
+    await page.reload();
+    await page.locator('[data-action="bulk-plan"]').waitFor();
+    await click('expand-generations');
+    assert.ok(await page.locator('.generation-member-row.model-row').count()>0);
+    assert.equal(await page.locator('[data-version="a"]').count(),0);
+    await click('expand-versions');
+    assert.ok(await page.locator('[data-version="a"]').count()>0);
+    await click('expand-generations');
+    assert.equal(await page.locator('[data-version="a"]').count(),0);
+    assert.ok(await page.locator('[data-version="x"]').count()>0);
     await click('bulk-plan');
+    await cell('x','2026-10').fill('25');
+    await click('expand-generations');
+    assert.equal(await cell('x','2026-10').inputValue(),'25');
+    assert.ok(await cell('a','2026-10').count()>0);
     assert.equal(await page.locator('[data-grid-id="group"]').count(),0);
-    assert.ok(await cell('x','2026-10').count()>0);
     await page.setViewportSize({width:1000,height:900});
     await page.screenshot({path:path.join(out,'editing-summary-narrow.png'),fullPage:true});
     await click('grid-cancel');
-    await openViews();
-    assert.notEqual(await page.locator('#saved-table-view option').filter({hasText:'重点车型'}).getAttribute('disabled'),null);
 
     // Model-year entry is the default; details survive zero and clear overrides.
     state=fixture();
@@ -226,7 +257,9 @@ async function main() {
     assert.equal(await page.locator('.annual-heading').count(),0);
     assert.equal(await page.locator('h1.plan-title').innerText(),'SOP计划表');
     const tableTop=(await page.locator('.plan-card').boundingBox()).y;
-    assert.ok(tableTop<240,`Compact table starts at ${tableTop}px`);
+    const header=await page.locator('.app-header').boundingBox();
+    const spaceBeforeTable=tableTop-(header.y+header.height);
+    assert.ok(spaceBeforeTable<180,`The table starts ${spaceBeforeTable}px below navigation`);
     const modelCell=()=>page.locator('[data-grid-model="S9 2026款"][data-grid-month="2026-10"]');
     const beforeDetails=JSON.stringify(state.plans.filter(p=>p.product_id==='a'||p.product_id==='b'));
     for(const [input,total] of [['500',640],['0',140],['',440]]) {
@@ -249,7 +282,7 @@ async function main() {
     console.log('PASS: model-year default, total override, zero, clear fallback, unchanged details, compact layout and reload persistence.');
 
     // Numeric-cell shortcuts and model/version edits use the same main-table session.
-    await click('expand-all');
+    await ensureVersionsExpanded();
     await page.locator('[data-hide-level="version"][data-hide-id="b"]').first().click();
     await page.locator('[data-edit="a"][data-month="2026-10"]').click();
     await cell('a','2026-10').waitFor();

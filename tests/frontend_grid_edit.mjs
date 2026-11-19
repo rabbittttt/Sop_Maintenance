@@ -40,7 +40,7 @@ run("const totalId=gridDraft.modelRows.get('享界|S9 2025款');gridRow(totalId)
 assert.equal(plain(run('gridPayload()')).entries[0].plan_level,'model');
 assert.equal(plain(run('gridPayload()')).entries[0].plans[0].sop,80);
 assert.equal(initial.plans[0].sop,10,'Typing a model total must preserve the saved version plan');
-run("gridDraft=null;bulkPlan();allExpanded=true;gridRender()");
+run("gridDraft=null;bulkPlan();bulkExpansion.versions=true;gridRender()");
 assert.match(nodes.get('#app').innerHTML,/data-grid-month="2026-10"/);
 assert.doesNotMatch(nodes.get('#app').innerHTML,/data-grid-month="2026-09"/);
 assert.match(nodes.get('#app').innerHTML,/计划量只读">15<\/td>/);

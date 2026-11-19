@@ -43,10 +43,10 @@ const assertInlineAdditions=expected=>{
 assert.doesNotMatch(html(),/data-action="(?:add-model|grid-add)"/,'Reading the table does not show model-creation buttons.');
 assert.equal(run("writeActions.has('add-model')"),false);
 assert.equal(run("writeActions.has('grid-add')"),true);
-run("state={...initial,products:[...initial.products,{...initial.products[0],id:'second',model:'另一车型 2027款'},{...initial.products[0],id:'other-brand',brand:'智界'}]};showLocks=true;allExpanded=true;indexData();planning();bulkPlan()");
+run("state={...initial,products:[...initial.products,{...initial.products[0],id:'second',model:'另一车型 2027款'},{...initial.products[0],id:'other-brand',brand:'智界'}]};showLocks=true;bulkExpansion.versions=true;indexData();planning();bulkPlan()");
 assertInlineAdditions(2);
 assert.match(html(),/data-new-model-brand="智界"/);
-run('gridDraft=null;state=initial;showLocks=false;allExpanded=false;indexData()');
+run('gridDraft=null;state=initial;showLocks=false;bulkExpansion.versions=false;indexData()');
 run("brand='享界';model='已有车型 2026款';query='Max';planning()");
 await run("handleAction('bulk-plan',{})");
 assertInlineAdditions(1);
@@ -93,14 +93,14 @@ await run("handleAction('grid-add',{dataset:{newModelBrand:'享界'}})");
 assert.equal(run("[...gridDraft.rows.values()].find(r=>r.isNew&&!r.virtual).brand"),'享界');
 
 // Expanding a summary shows one root entry, without duplicates on member rows.
-run("const fixtureSummaryName='享界 组合 2027款汇总';state={...initial,products:[{...initial.products[0],id:'summary-root',model:'组合 2027款',version:modelPlanLabel,plan_level:'model',summary_generation:fixtureSummaryName}],generation_members:{...initial.generation_members,products:[{...initial.products[0],id:'summary-child',parent_generation:fixtureSummaryName}]}};gridDraft=null;hiddenRows={};brand='';model='';query='';allExpanded=true;indexData();planning();bulkPlan()");
+run("const fixtureSummaryName='享界 组合 2027款汇总';state={...initial,products:[{...initial.products[0],id:'summary-root',model:'组合 2027款',version:modelPlanLabel,plan_level:'model',summary_generation:fixtureSummaryName}],generation_members:{...initial.generation_members,products:[{...initial.products[0],id:'summary-child',parent_generation:fixtureSummaryName}]}};gridDraft=null;hiddenRows={};brand='';model='';query='';bulkExpansion={versions:true,generations:true};indexData();planning();bulkPlan()");
 assertInlineAdditions(1);
 assert.match(html(),/已有车型 2026款/,'The expanded member model remains present.');
 assert.match(html(),/data-new-model-brand="享界"/);
 await run("handleAction('grid-add',{dataset:{newModelBrand:'享界'}})");
 assert.equal(run("[...gridDraft.rows.values()].find(r=>r.isNew&&!r.virtual).brand"),'享界');
 assert.equal(run("[...gridDraft.rows.values()].find(r=>r.isNew&&!r.virtual).parent_generation"),undefined,'The new model stays independent of the member hierarchy.');
-run('allExpanded=false');
+run('bulkExpansion={versions:null,generations:null}');
 
 // Empty, hidden and filtered catalogs keep exactly one entry inside the table.
 for(const setup of [
