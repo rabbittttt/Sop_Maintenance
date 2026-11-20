@@ -130,8 +130,8 @@ class GatewayHTTPTest(unittest.TestCase):
             code, headers, body = request(server)
             self.assertEqual(code, 200)
             self.assertIn(b"isolated SOP", body)
-            self.assertEqual(headers["X-Frame-Options"], "SAMEORIGIN")
-            self.assertEqual(headers["Content-Security-Policy"], "frame-ancestors 'self'")
+            self.assertNotIn("X-Frame-Options", headers)
+            self.assertNotIn("frame-ancestors", headers.get("Content-Security-Policy", ""))
             self.assertEqual(request(server, "/api/products")[0], 404)
             self.assertEqual(request(server, "/sop-other/api/products")[0], 404)
             self.assertEqual(request(server, "/sop")[0:1], (308,))
@@ -257,7 +257,8 @@ class GatewayHTTPTest(unittest.TestCase):
             code, headers, body = request(server, "/api/session")
             self.assertEqual(code, 200)
             self.assertEqual(json.loads(body), {"mode": "console", "user": None, "canWrite": True})
-            self.assertEqual(headers["X-Frame-Options"], "DENY")
+            self.assertNotIn("X-Frame-Options", headers)
+            self.assertNotIn("frame-ancestors", headers.get("Content-Security-Policy", ""))
             self.assertEqual(request(server, "/api/session", headers={"Origin": ORIGIN})[0], 403)
 
     def test_windows_console_uses_the_same_account_for_display_and_writes(self):

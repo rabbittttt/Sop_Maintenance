@@ -151,12 +151,6 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                     "method": self.command, "path": self.path.split("?", 1)[0], "status": code,
                 }, ensure_ascii=True))
 
-        def end_headers(self):
-            if gateway:
-                self.send_header("X-Frame-Options", "SAMEORIGIN")
-                self.send_header("Content-Security-Policy", "frame-ancestors 'self'")
-            super().end_headers()
-
         def log_message(self, format, *args):
             LOGGER.info("%s %s", self.client_address[0], format % args)
 
@@ -166,8 +160,6 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
             self.send_header("Content-Length", str(length))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            if not gateway:
-                self.send_header("X-Frame-Options", "DENY")
             self.send_header("Referrer-Policy", "same-origin")
             self.end_headers()
 
