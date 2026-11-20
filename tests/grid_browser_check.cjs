@@ -301,7 +301,8 @@ async function main() {
     sessionAccount=otherAccount;
     await page.reload();
     await page.locator('[data-action="bulk-plan"]').waitFor();
-    assert.equal(await page.locator('#owner-btn').innerText(),otherAccount);
+    assert.equal(await page.locator('#owner-btn').count(),0);
+    assert.ok(!(await page.locator('.header-actions').innerText()).includes(otherAccount));
     assert.equal(await page.locator('#saved-table-view option').filter({hasText:'重点车型'}).count(),0);
     await ensureVersionsExpanded();
     assert.ok(await page.locator('[data-version="a"]').count()>0);
@@ -343,7 +344,7 @@ async function main() {
       [mainAccount,mainAccount,otherAccount]);
     assert.ok(viewRequests.every(({request})=>!['account','owner','user','principal'].some(key=>key in request)),
       'Account identity comes from the session, never from a client-supplied field');
-    console.log('PASS: named views persist across browsers, isolate Windows accounts, allow separate same-name views and explicitly import older local views.');
+    console.log('PASS: named views persist across browsers, isolate accounts, allow separate same-name views and explicitly import older local views.');
 
     // Bulk expansion can show either layer of the hierarchy.
     state=fixture('summary');

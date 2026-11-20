@@ -1,5 +1,4 @@
 """Exercise personal view persistence through the trusted workbench gateway."""
-import base64
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime
@@ -15,7 +14,7 @@ from server import make_handler
 from sop import user_views
 from sop.gateway import GatewayConfig
 from sop.store import SOPStore, TZ, ValidationError
-from tests.test_portal_gateway import KEY, ORIGIN, RefreshStub, request
+from tests.test_portal_gateway import KEY, ORIGIN, RefreshStub, frame_headers, request
 
 
 ALICE = "EXAMPLE\\alice"
@@ -62,7 +61,7 @@ class UserViewsTest(unittest.TestCase):
             def call(account, payload=None, path=PATH):
                 status, _, content = request(
                     server, path, method="GET" if payload is None else "POST",
-                    body=payload, headers={"X-SOP-User": account},
+                    body=payload, headers=frame_headers(account),
                 )
                 return status, json.loads(content)
 
@@ -89,7 +88,7 @@ class UserViewsTest(unittest.TestCase):
             self.assertEqual(call(BOB)[1]["active"], second["id"])
 
             # Distinct non-ASCII account names must not be joined by Unicode expansion.
-            non_ascii = "b64:" + base64.b64encode("EXAMPLE\\groß".encode()).decode()
+            non_ascii = "EXAMPLE\\groß"
             call(non_ascii, save)
             self.assertEqual(call("EXAMPLE\\gross"), (200, empty))
 

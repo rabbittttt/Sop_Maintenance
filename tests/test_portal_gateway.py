@@ -12,6 +12,7 @@ import threading
 import time
 import unittest
 from unittest.mock import patch
+from urllib.parse import quote
 
 from server import make_handler
 from sop.gateway import GatewayConfig, GatewayError, canonical_origin
@@ -19,7 +20,7 @@ from sop.store import ValidationError
 
 
 KEY = "x" * 48
-PRINCIPAL = "EXAMPLE\\alice"
+PRINCIPAL = "portal-alice"
 ORIGIN = "https://data.example.test"
 
 
@@ -69,9 +70,18 @@ def running(*, writes=False, gateway_mode=True, console_user=None):
             server.server_close()
 
 
+def frame_headers(account=PRINCIPAL):
+    if account is None:
+        return {"Sop-Frame-Identity": None}
+    identity = {"account": account, "roleCode": "0", "roleName": "计划员"}
+    return {"Sop-Frame-Identity": quote(json.dumps(identity, ensure_ascii=False))}
+
+
 def request(server, path="/sop/", *, method="GET", body=None, headers=None):
     connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
-    request_headers = {"X-SOP-Proxy-Key": KEY, "X-SOP-User": PRINCIPAL}
+    request_headers = {"X-SOP-Proxy-Key": KEY}
+    if path.startswith("/sop/"):
+        request_headers.update(frame_headers())
     if method == "POST":
         request_headers.update({"Content-Type": "application/json", "Origin": ORIGIN})
     if headers:
@@ -140,31 +150,42 @@ class GatewayHTTPTest(unittest.TestCase):
             self.assertEqual(code, 200)
             self.assertEqual(body, b"")
 
-    def test_secret_and_valid_windows_identity_are_mandatory(self):
+    def test_proxy_secret_and_allowed_host_are_mandatory(self):
         with running() as (server, _, _):
             for headers in ({"X-SOP-Proxy-Key": None}, {"X-SOP-Proxy-Key": "forged"},
-                            {"X-SOP-User": None}, {"X-SOP-User": "self-claimed"}, {"X-SOP-User": "\\"},
                             {"Host": "external.example"}):
                 with self.subTest(headers=headers):
                     self.assertEqual(request(server, headers=headers)[0], 403)
             self.assertEqual(request(server, headers={"Host": "data.example.test"})[0], 200)
 
-    def test_bridge_base64_identity_preserves_unicode_without_allowing_controls(self):
-        with running(writes=True) as (server, store, _):
-            principal = "EXAMPLE\\王小明"
-            encoded = "b64:" + base64.b64encode(principal.encode("utf-8")).decode("ascii")
-            code, _, body = request(server, "/sop/api/session", headers={"X-SOP-User": encoded})
-            self.assertEqual(code, 200)
-            self.assertEqual(json.loads(body)["user"], principal)
-            request(server, "/sop/api/plans", method="POST", body={"changes": []}, headers={"X-SOP-User": encoded})
-            self.assertEqual(store.saved[0]["owner"], principal)
-            for invalid in ("b64:%%", "b64:/w==", "b64:" + base64.b64encode(b"DOMAIN\\a\n").decode("ascii")):
-                self.assertEqual(request(server, headers={"X-SOP-User": invalid})[0], 403)
+    def test_iframe_identity_controls_session_and_writes(self):
+        account = "计划员023"
+        with running(writes=True) as (server, store, imports):
+            headers = {**frame_headers(account), "X-SOP-User": "old-windows-account"}
+            status, _, data = request(server, "/sop/api/session", headers=headers)
+            self.assertEqual(status, 200)
+            session = json.loads(data)
+            self.assertEqual((session["account"], session["user"], session["roleCode"], session["roleName"]),
+                             (account, account, "0", "计划员"))
+            self.assertEqual(request(server, "/sop/api/plans", method="POST", headers=headers,
+                                     body={"owner": "别人", "changes": []})[0], 200)
+            self.assertEqual(store.saved[0]["owner"], account)
+            self.assertEqual(request(server, "/sop/api/plans/import-xlsx", method="POST", headers=headers,
+                                     body={"filename": "plan.xlsx", "content_base64": "YQ=="})[0], 200)
+            self.assertEqual(imports.actors, [account])
+            for override in (frame_headers(None), {"X-SOP-Proxy-Key": None},
+                             {"Sop-Frame-Identity": quote('{"account":"alice"}')},
+                             frame_headers("alice\nexample")):
+                invalid = {**headers, **override}
+                self.assertEqual(request(server, "/sop/api/user-views", headers=invalid)[0], 403)
+                self.assertEqual(request(server, "/sop/api/plans", method="POST", headers=invalid)[0], 403)
+            self.assertEqual(len(store.saved), 1)
 
     def test_origin_is_explicit_and_writes_fail_closed(self):
         with running() as (server, store, _):
             code, _, body = request(server, "/sop/api/session")
-            self.assertEqual(json.loads(body), {"mode": "gateway", "user": PRINCIPAL, "canWrite": False})
+            self.assertEqual(json.loads(body), {"mode": "gateway", "user": PRINCIPAL, "account": PRINCIPAL,
+                                               "roleCode": "0", "roleName": "计划员", "canWrite": False})
             self.assertEqual(request(server, "/sop/api/write-access", method="POST")[0], 403)
             self.assertEqual(request(server, "/sop/api/plans", method="POST", body={"owner": "forged"})[0], 403)
             self.assertEqual(request(server, headers={"Origin": "https://other.example"})[0], 403)
@@ -178,7 +199,7 @@ class GatewayHTTPTest(unittest.TestCase):
     def test_department_members_share_writes_and_keep_distinct_audit_owners(self):
         with running(writes=True) as (server, store, _):
             for principal in ("EXAMPLE\\alice", "EXAMPLE\\bob"):
-                headers = {"X-SOP-User": principal}
+                headers = frame_headers(principal)
                 code, _, body = request(server, "/sop/api/session", headers=headers)
                 self.assertEqual(code, 200)
                 self.assertTrue(json.loads(body)["canWrite"])
@@ -231,11 +252,11 @@ class GatewayHTTPTest(unittest.TestCase):
 
     def test_duplicate_headers_are_rejected(self):
         with running(writes=True) as (server, _, _):
-            for duplicated in ("Host", "X-SOP-Proxy-Key", "X-SOP-User", "Origin", "Content-Length"):
+            for duplicated in ("Host", "X-SOP-Proxy-Key", "Sop-Frame-Identity", "Origin", "Content-Length"):
                 connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
                 connection.putrequest("POST", "/sop/api/write-access", skip_host=True)
                 values = {"Host": f"127.0.0.1:{server.server_port}", "X-SOP-Proxy-Key": KEY,
-                          "X-SOP-User": PRINCIPAL, "Origin": ORIGIN, "Content-Length": "0", "Content-Type": "application/json"}
+                          **frame_headers(), "Origin": ORIGIN, "Content-Length": "0", "Content-Type": "application/json"}
                 for name, value in values.items():
                     connection.putheader(name, value)
                     if name == duplicated:

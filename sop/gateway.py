@@ -1,13 +1,7 @@
-"""Explicit trust boundary for the IIS-hosted SOP deployment.
-
-IIS must overwrite both proxy headers and authorize every POST by Windows group.
-The shared key authenticates that proxy, not a browser or a Windows user by itself.
-"""
+"""Validate the gateway transport and parse the portal-declared iframe identity."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import base64
-import binascii
 import hmac
 import ipaddress
 import json
@@ -109,18 +103,6 @@ class GatewayConfig:
         key = single_header(headers, "X-SOP-Proxy-Key", required=True)
         if not key.isascii() or not hmac.compare_digest(key, self.proxy_secret):
             raise GatewayError("代理身份验证失败。")
-        user = single_header(headers, "X-SOP-User", required=True)
-        if user.startswith("b64:"):
-            try:
-                user = base64.b64decode(user[4:], validate=True).decode("utf-8")
-            except (binascii.Error, UnicodeError, ValueError):
-                raise GatewayError("Windows 用户身份编码无效。")
-        elif not user.isascii():
-            raise GatewayError("Windows 用户身份编码无效。")
-        if (not user or user != user.strip() or len(user) > 100 or "," in user
-                or any(ord(c) < 32 or ord(c) == 127 for c in user)
-                or not re.fullmatch(r"[^\\@]+\\[^\\@]+|[^\\@]+@[^\\@]+", user)):
-            raise GatewayError("Windows 用户身份无效。")
         host = single_header(headers, "Host", required=True).lower()
         public_host = urlsplit(self.public_origin).netloc
         allowed_hosts = {public_host, f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}
@@ -138,7 +120,6 @@ class GatewayConfig:
                 raise GatewayError("请求来源不允许。")
         if headers.get_all("Transfer-Encoding", []) or len(headers.get_all("Content-Length", [])) > 1:
             raise GatewayError("请求长度或传输格式无效。", 400)
-        return user
 
     def route(self, target):
         if not isinstance(target, str) or not target.startswith("/") or target.startswith("//"):
@@ -158,6 +139,26 @@ class GatewayConfig:
         if not path.startswith(self.base_path + "/"):
             raise GatewayError("应用路径不存在。", 404)
         return path[len(self.base_path):]
+
+
+def frame_identity(headers):
+    encoded = single_header(headers, "Sop-Frame-Identity")
+    if encoded is None:
+        return {}
+    try:
+        if len(encoded) > 4096:
+            raise ValueError()
+        fields = json.loads(unquote(encoded, errors="strict"))
+        if not isinstance(fields, dict) or set(fields) != {"account", "roleCode", "roleName"}:
+            raise ValueError()
+        for value in fields.values():
+            if (not isinstance(value, str) or not value.strip() or value != value.strip()
+                    or len(value) > 100 or not value.isprintable()):
+                raise ValueError()
+            value.encode("utf-8")
+    except (ValueError, UnicodeError):
+        raise GatewayError("门户账号信息无效。")
+    return fields
 
 
 def attributed_body(body, user):

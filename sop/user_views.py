@@ -1,4 +1,4 @@
-"""Persist personal planning views for the authenticated Windows account."""
+"""Persist personal planning views for the authenticated account."""
 from __future__ import annotations
 
 import json
@@ -31,7 +31,7 @@ def create_schema(db):
 
 def _account(principal):
     if not principal:
-        raise ValidationError("无法确认当前 Windows 账号。")
+        raise ValidationError("无法确认当前登录账号。")
     # Avoid Unicode folds that can collapse different SAM account names, e.g. ß and ss.
     return principal.translate(ASCII_LOWER)
 

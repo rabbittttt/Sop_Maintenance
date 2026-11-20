@@ -8,8 +8,9 @@ const serviceBase = (() => {
   const directory = new URL('.', script || location.href).pathname;
   return directory === '/' ? '' : directory.replace(/\/$/, '');
 })();
-const access = {gateway:!!serviceBase,canWrite:!serviceBase,user:'',message:serviceBase?'正在连接业务服务…':''};
-const hasTrustedOperator = () => access.gateway || !!access.user;
+const frameAccount = typeof window === 'undefined' ? null : window.sopFrameAccount;
+const access = {gateway:!!serviceBase,canWrite:!serviceBase && !frameAccount,user:'',message:serviceBase?'正在连接业务服务…':''};
+const hasTrustedOperator = () => !!frameAccount || access.gateway || !!access.user;
 const writeActions = new Set(['grid-save','grid-add','manage-products','new-product','rename-model','open-workbook','sync-workbook','resolve-db','resolve-workbook','edit-first','bulk-plan','export-plan','import-plan','detail-edit','edit-shipments','save-settings','refresh-sales','create-snapshot','view-save','view-delete','view-import-local']);
 const readOnlyMessage = '当前服务暂停写入或连接校验未通过，请稍后重试或联系维护人员。部门成员使用相同的业务功能。';
 function serviceUrl(path) {
@@ -26,6 +27,11 @@ async function serviceFetch(path, options = {}, writeProbe = false) {
   const method = (options.method || 'GET').toUpperCase();
   const mutating = !['GET','HEAD'].includes(method);
   if (mutating && !(writeProbe && path === '/api/write-access')) requireWrite();
+  if (frameAccount) {
+    const identity = frameAccount.current;
+    if (!identity) throw new Error('等待门户账号。');
+    options = {...options, headers:{...options.headers, 'Sop-Frame-Identity':encodeURIComponent(JSON.stringify(identity))}};
+  }
   let response;
   try { response = await fetch(serviceUrl(path), {credentials:'same-origin',...options}); }
   catch (cause) {
@@ -41,16 +47,9 @@ async function serviceFetch(path, options = {}, writeProbe = false) {
 function applyAccessControls() {
   const banner = $('#access-status');
   if (banner) {
-    banner.hidden = !access.gateway || access.canWrite;
+    banner.hidden = (!access.gateway && !frameAccount) || access.canWrite;
     banner.textContent = access.canWrite ? '' : access.message || readOnlyMessage;
     banner.classList.toggle('read-only', !access.canWrite);
-  }
-  const ownerButton = $('#owner-btn');
-  if (ownerButton && hasTrustedOperator()) {
-    ownerButton.textContent = access.user || '企业用户';
-    ownerButton.disabled = true;
-    ownerButton.setAttribute('aria-label', '当前登录用户');
-    ownerButton.title = '操作人取自 Windows 登录账户';
   }
   $$('[data-action],[data-edit],[data-catalog-edit],[data-catalog-bind],#generation-filter,#bridge-toggle,#edit-dialog button[type="submit"]').forEach(control => {
     const mutating = writeActions.has(control.dataset?.action) || control.hasAttribute?.('data-edit') || control.hasAttribute?.('data-catalog-edit') || control.hasAttribute?.('data-catalog-bind') || ['generation-filter','bridge-toggle'].includes(control.id) || control.type === 'submit';
@@ -67,11 +66,18 @@ function applyAccessControls() {
 }
 async function initializeAccess() {
   try {
+    if (frameAccount) {
+      access.message = '等待门户账号。';
+      applyAccessControls();
+      await frameAccount.ready;
+    }
     const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined;
     const response = await serviceFetch('/api/session', {signal});
     if (!response.ok) throw new Error('登录信息暂不可用');
     const session = await response.json();
     if (!session || !['gateway','console'].includes(session.mode) || (serviceBase && session.mode !== 'gateway') || typeof session.canWrite !== 'boolean') throw new Error('登录信息暂不可用');
+    if (frameAccount && (!frameAccount.current || session.user !== frameAccount.current.account))
+      throw new Error('门户账号与服务端会话不一致。');
     access.gateway = session.mode === 'gateway';
     access.user = typeof session.user === 'string' ? session.user.trim() : '';
     if (access.user) owner = access.user;
@@ -84,12 +90,13 @@ async function initializeAccess() {
       }
       access.message = access.canWrite ? '' : readOnlyMessage;
     }
-  } catch {
+  } catch (error) {
     // A root-only legacy console has no session API. Subpath deployments fail closed.
-    access.canWrite = !serviceBase && !access.gateway;
+    access.canWrite = !serviceBase && !access.gateway && !frameAccount;
     access.message = '暂时无法确认登录信息或服务状态，当前仅允许查看。请稍后刷新或联系维护人员。';
   }
   applyAccessControls();
+  if (frameAccount && !access.user) throw new Error('门户账号与服务端会话未能核对。');
 }
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = v => v == null ? '—' : Number(v).toLocaleString('zh-CN', {maximumFractionDigits: 2});
@@ -142,7 +149,7 @@ let selected = null, snapshotList = [], currentSnapshot = null;
 const expansionActions = {'expand-versions':'versions','expand-generations':'generations'};
 let planIndex = new Map(), salesIndex = new Map(), shipmentIndex = new Map();
 let committeeIndex = new Map(), currentCommitteeDecision = null;
-let owner = localStorage.getItem('sop-owner') || '';
+let owner = frameAccount ? '' : localStorage.getItem('sop-owner') || '';
 let matchMonth = '', matchProduct = '', comparison = null, activeRequest = 0;
 let generationSwitchPending = false, generationViewError = '', generationErrorKind = 'rules';
 let gridDraft=null, viewsRestored=false, viewNameDraft=null;
@@ -598,7 +605,6 @@ async function load(render = true) {
   if(gridDraft)throw new Error('请先保存或取消表内修改，再刷新数据');
   const freshState=await api('/api/state');if(gridDraft)throw new Error('请先保存或取消表内修改，再刷新数据');state=freshState;optionRequestId++;optionMix=null;optionMixError='';generationViewError=state.generation_view?.error||'';generationErrorKind='rules';indexData();await restoreInitialView();
   target ||= state.current_month; matchMonth ||= shift(state.current_month,-1); metric = 'locked_orders';
-  const ob = $('#owner-btn'); if (ob) ob.textContent = owner || '设置维护人';
   if(render) await renderPage();
   applyAccessControls();
 }
@@ -1625,7 +1631,6 @@ async function renderReconcilePage() {
       rememberOwner: value => {
         if (hasTrustedOperator() || !value) return;
         owner = value;
-        $('#owner-btn').textContent = owner;
         try { localStorage.setItem('sop-owner', owner); } catch { /* Keep the current operator in memory. */ }
       },
     });
@@ -1845,14 +1850,8 @@ document.addEventListener('input',e=>{
   if(gridDraft){if(gridLocked())return;if(e.target.dataset.gridGroup){gridChangeModel(e.target.dataset.gridGroup,e.target.dataset.gridGroupField,e.target.value);return;}const row=gridRow(e.target.dataset.gridId);if(row){if(e.target.dataset.gridMonth)row.values[e.target.dataset.gridMonth]=e.target.value;else if(e.target.dataset.gridField)row[e.target.dataset.gridField]=e.target.value;e.target.removeAttribute('aria-invalid');e.target.classList.add('changed');gridDraft.request=null;return;}if(e.target.id==='grid-owner'){if(!hasTrustedOperator())gridDraft.owner=e.target.value;return;}if(e.target.id==='grid-reason'){gridDraft.reason=e.target.value;return;}return;}
   if(e.target.id==='table-view-name'){viewNameDraft=e.target.value;return;}
   if(e.target.id==='version-search'){clearTimeout(searchTimer);query=e.target.value;searchTimer=setTimeout(async()=>{const pos=e.target.selectionStart;await renderPage();const inp=$('#version-search');if(inp){inp.focus();inp.setSelectionRange(pos,pos)}},300);}});
-$('#owner-btn')?.addEventListener('click',()=>{
-  if(hasTrustedOperator())return;
-  if(gridDraft)return toast('请在表内维护条填写维护人',true);
-  openDialog(`<form id="owner-form"><h2>设置维护人</h2><label class="field">姓名<input id="owner-name" value="${esc(owner)}" required maxlength="60"></label><div class="dialog-actions">${button('取消','close-dialog')}<button class="button primary" type="submit">保存</button></div></form>`);
-  $('#owner-form').onsubmit=e=>{e.preventDefault();owner=$('#owner-name').value.trim();localStorage.setItem('sop-owner',owner);$('#owner-btn').textContent=owner;closeDialog();};
-});
 $('#refresh-btn')?.addEventListener('click',async()=>{try{await load();toast('已载入最新计划');}catch(err){toast(err.message,true);}});
-window.addEventListener('beforeunload',e=>{if(gridDraft){e.preventDefault();e.returnValue='';}});
+window.addEventListener('beforeunload',e=>{if(gridDraft && (!frameAccount || frameAccount.current)){e.preventDefault();e.returnValue='';}});
 window.addEventListener('unhandledrejection',e=>toast(e.reason?.message||'加载失败，请重试',true));
 initializeAccess().then(()=>load()).catch(err=>{$('#app').innerHTML=`<div class="empty-state"><h1>暂时无法连接数据服务</h1><p>${esc(err.message)}</p><p>${access.gateway?'请联系应用负责人检查内网业务服务，稍后刷新重试。':'请使用项目中的启动脚本打开看板。'}</p></div>`;});
 

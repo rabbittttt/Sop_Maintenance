@@ -29,7 +29,7 @@ from sop.backup import SnapshotBackup
 from sop.export import ExportError, MAX_REQUEST_BYTES, PlanExport
 from sop.refresh import SalesRefresh
 from sop.source_rules import MergeRuleError
-from sop.gateway import GatewayConfig, GatewayError, attributed_body
+from sop.gateway import GatewayConfig, GatewayError, attributed_body, canonical_origin, frame_identity
 from sop.option_mix import OptionMixError, read_option_mix
 from sop import user_views
 
@@ -88,32 +88,12 @@ def open_workbench(url):
     print(f"未能自动打开浏览器，请手动访问：{url}", flush=True)
 
 
-def windows_console_user():
-    """Read the Windows account that launched this loopback-only service."""
-    if os.name != "nt":
-        return None
-    import ctypes
-    from ctypes import wintypes
-
-    get_user_name = ctypes.windll.secur32.GetUserNameExW
-    get_user_name.argtypes = (ctypes.c_int, wintypes.LPWSTR, ctypes.POINTER(wintypes.ULONG))
-    get_user_name.restype = ctypes.c_ubyte
-    buffer = ctypes.create_unicode_buffer(256)
-    length = wintypes.ULONG(len(buffer))
-    if get_user_name(2, buffer, ctypes.byref(length)):  # NameSamCompatible: DOMAIN\account
-        user = buffer.value
-    else:
-        try:
-            user = os.getlogin()
-        except OSError:
-            return None
-    user = user.strip()
-    return user if 0 < len(user) <= 100 and all(ord(char) >= 32 and ord(char) != 127 for char in user) else None
-
-
 def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None, plan_export=None,
                  source_refresh=None, plan_roundtrip=None, gateway=None, *, console_user=None):
     plan_export = plan_export or PlanExport(root=ROOT)
+    frame_origin = os.environ.get("SOP_PARENT_ORIGIN", "")
+    if frame_origin:
+        frame_origin = canonical_origin(frame_origin)
     roundtrip_lock = threading.Lock()
     reconcile_service_instance = None
 
@@ -147,7 +127,7 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                 # JSON escaping prevents usernames/paths becoming log directives;
                 # never log the proxy key, request body, or client-claimed owner.
                 LOGGER.info("sop_audit %s", json.dumps({
-                    "principal": getattr(self, "gateway_user", None),
+                    "principal": getattr(self, "actor", None),
                     "method": self.command, "path": self.path.split("?", 1)[0], "status": code,
                 }, ensure_ascii=True))
 
@@ -259,9 +239,15 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                 self.connection.settimeout(previous_timeout)
 
         def _local_request(self):
+            try:
+                self.identity = frame_identity(self.headers)
+                self.actor = self.identity.get("account") or (None if gateway else console_user)
+            except GatewayError as error:
+                self._json({"error": str(error)}, error.status)
+                return False
             if gateway:
                 try:
-                    self.gateway_user = gateway.authorize(self.headers, self.client_address[0], port, self.command)
+                    gateway.authorize(self.headers, self.client_address[0], port, self.command)
                     self.application_path = gateway.route(self.path)
                     if self.application_path is None:
                         if self.command not in {"GET", "HEAD"}:
@@ -271,8 +257,11 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                         self.send_header("Content-Length", "0")
                         self.end_headers()
                         return False
+                    needs_account = self.application_path.startswith("/api/") and self.application_path not in {"/api/health", "/api/session"}
+                    if (needs_account or self.command == "POST") and not self.actor:
+                        raise GatewayError("尚未收到门户账号。")
                     if self.command == "POST" and not gateway.allow_writes:
-                        raise GatewayError("写入尚未开放，请联系管理员配置允许写入的域用户组。")
+                        raise GatewayError("当前服务暂停写入。")
                     return True
                 except GatewayError as error:
                     self._json({"error": str(error)}, error.status)
@@ -334,14 +323,14 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
             try:
                 if path == "/api/session":
                     self._json({"mode": "gateway" if gateway else "console",
-                                "user": self.gateway_user if gateway else console_user,
-                                "canWrite": gateway.allow_writes if gateway else True})
+                                "user": self.actor,
+                                **self.identity, "canWrite": bool(self.actor and gateway.allow_writes) if gateway else True})
                 elif path == "/api/user-views":
-                    principal = self.gateway_user if gateway else console_user
+                    principal = self.actor
                     if principal:
                         self._json(user_views.get_views(store, principal))
                     else:
-                        self._json({"error": "无法确认当前 Windows 账号。"}, 403)
+                        self._json({"error": "无法确认当前登录账号。"}, 403)
                 elif path == "/api/health":
                     health = {"app_id": "hima-sop", "launch_mode": "gateway" if gateway else getattr(self.server, "launch_mode", None)}
                     if not gateway:
@@ -449,6 +438,10 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                         self._json({"error": "页面不存在。"}, 404)
                         return
                     encoded = target.read_bytes()
+                    if frame_origin and target == web_root.resolve() / "index.html":
+                        # canonical_origin restricts the value to an ASCII HTTP(S) origin.
+                        encoded = encoded.replace(b'name="sop-parent-origin" content=""',
+                                                  f'name="sop-parent-origin" content="{frame_origin}"'.encode("ascii"))
                     content_type = ("text/javascript" if target.suffix.lower() == ".mjs" else
                                     mimetypes.guess_type(target.name)[0] or "application/octet-stream")
                     if content_type.startswith("text/") or content_type in {"application/javascript", "application/json"}:
@@ -467,11 +460,11 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
             try:
                 path = self.application_path if gateway else urlparse(self.path).path
                 if path == "/api/user-views":
-                    principal = self.gateway_user if gateway else console_user
+                    principal = self.actor
                     if principal:
                         self._json(user_views.update_views(store, principal, self._body(MAX_REQUEST_BYTES)))
                     else:
-                        self._json({"error": "无法确认当前 Windows 账号。"}, 403)
+                        self._json({"error": "无法确认当前登录账号。"}, 403)
                     return
                 if gateway and path == "/api/plan-workbook/open":
                     self._json({"error": "服务端不支持从浏览器打开服务器桌面文件，请下载副本。"}, 403)
@@ -482,7 +475,7 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                     from sop.reconcile import MAX_IMPORT_BYTES
                     limit = MAX_IMPORT_BYTES
                 body = self._body(limit)
-                actor = self.gateway_user if gateway else console_user
+                actor = self.actor
                 if actor:
                     body = attributed_body(body, actor)
                     if is_reconcile or path in {"/api/plans", "/api/plans/batch-edit", "/api/products", "/api/shipments"}:
@@ -751,8 +744,7 @@ def main():
             workers.append(worker)
         server.launch_mode = "gateway" if gateway else "console"
         server.RequestHandlerClass = make_handler(store, args.web_dir, args.port, workbook_sync,
-                                                  snapshot_backup, source_refresh=source_refresh, gateway=gateway,
-                                                  console_user=None if gateway else windows_console_user())
+                                                  snapshot_backup, source_refresh=source_refresh, gateway=gateway)
         print(f"\nSOP管理已就绪：{url}\n保持此窗口打开；关闭窗口或按 Ctrl+C 即停止。\n关闭浏览器页面不会停止工作台。\n", flush=True)
         if args.open_browser:
             threading.Thread(target=open_workbench, args=(url,), name="open-browser", daemon=True).start()

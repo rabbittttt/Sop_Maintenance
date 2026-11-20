@@ -13,11 +13,11 @@ function element(id='',dataset={}) {
     hasAttribute(name){if(attrs.has(name))return true;return name.startsWith('data-')&&Object.hasOwn(this.dataset,name.slice(5).replace(/-([a-z])/g,(_,x)=>x.toUpperCase()));},
     getAttribute:name=>attrs.get(name),focus(){}};
 }
-function fixture(base='/sop/') {
+function fixture(base='/sop/', frameAccount=null) {
   const requests=[],controls=[element('',{action:'bulk-plan'}),element('',{action:'export-plan'}),element('',{action:'refresh-sales'}),element('',{action:'view-save'}),element('generation-filter'),element('bridge-toggle'),element('',{catalogEdit:'p1'}),element('',{action:'open-workbook'})];
-  const nodes=new Map(['access-status','owner-btn','grid-owner'].map(id=>['#'+id,element(id)]));
+  const nodes=new Map(['access-status','grid-owner'].map(id=>['#'+id,element(id)]));
   const replies=new Map();
-  const context=vm.createContext({URL,location:{href:'http://data.example'+base},
+  const context=vm.createContext({URL,window:{sopFrameAccount:frameAccount},location:{href:'http://data.example'+base},
     document:{currentScript:{src:'http://data.example'+base+'app.js'},querySelector:selector=>nodes.get(selector)||null,
       querySelectorAll:selector=>selector.startsWith('input[id$=')?[nodes.get('#grid-owner')]:selector.startsWith('[data-action]')?controls:[]},
     localStorage:{getItem:key=>key==='sop-owner'?'client-provided-owner':null,setItem(){}},
@@ -41,7 +41,6 @@ assert.equal(f.run('access.canWrite'),false);
 assert.equal(f.run('owner'),'CORP\\member','The server identity replaces the browser owner');
 assert.equal(f.requests.length,1,'Service maintenance pause does not probe write access');
 assert.match(f.nodes.get('#access-status').textContent,/暂停写入/);
-assert.equal(f.nodes.get('#owner-btn').disabled,true);
 assert.equal(f.nodes.get('#grid-owner').readOnly,true);
 assert.equal(f.nodes.get('#grid-owner').value,'CORP\\member');
 assert.equal(f.controls[0].disabled,true);
@@ -110,9 +109,43 @@ assert.equal(f.nodes.get('#access-status').hidden,true);
 f=fixture('/');f.respond('/api/session',200,{mode:'console',user:'DESKTOP\\李晓',canWrite:true});
 await f.run('initializeAccess()');
 assert.equal(f.run('owner'),'DESKTOP\\李晓');
-assert.equal(f.nodes.get('#owner-btn').textContent,'DESKTOP\\李晓');
 assert.equal(f.nodes.get('#grid-owner').readOnly,true);
 assert.equal(f.nodes.get('#grid-owner').value,'DESKTOP\\李晓');
 assert.deepEqual(f.requests.map(request=>request.path),['/api/session']);
 
-console.log('PASS: scoped API/Excel transport, gateway session checks, IIS write probe, fail-closed paused service UI, trusted owner display, permission revocation and legacy console.');
+console.log('PASS: scoped API/Excel transport, gateway session checks, IIS write probe, fail-closed paused service UI, maintenance form attribution, permission revocation and legacy console.');
+
+
+// Listen before the outer frame's load notification and ignore siblings / other origins.
+const listeners = {};
+const parent = {};
+let reloads = 0;
+const receiver = vm.createContext({window:{parent,addEventListener:(type,fn)=>listeners[type]=fn},
+  document:{querySelector:()=>({content:'https://portal.example'})},
+  location:{origin:'https://sop.example',reload:()=>reloads++}});
+vm.runInContext(readFileSync(new URL('../web/frame-account.js',import.meta.url),'utf8'),receiver);
+const frame = receiver.window.sopFrameAccount;
+const identity = {account:'计划员023',roleCode:0,roleName:'计划员'};
+const deliver = (data,source=parent,origin='https://portal.example') => listeners.message({data,source,origin});
+deliver(identity,{});deliver(identity,parent,'https://other.example');deliver({...identity,roleName:''});
+assert.equal(frame.current,null);
+f=fixture('/sop/',frame);
+f.respond('/api/session',200,{mode:'gateway',user:identity.account,canWrite:true});
+f.respond('/api/write-access',200,{canWrite:true});
+const login=f.run('initializeAccess()');
+assert.equal(f.requests.length,0);
+deliver(identity);
+await login;
+assert.equal(f.run('access.user'),identity.account);
+assert.equal(f.run('access.canWrite'),true);
+assert.equal(frame.current.roleCode,'0');
+assert.ok(f.requests.every(r=>JSON.parse(decodeURIComponent(r.options.headers['Sop-Frame-Identity'])).account===identity.account));
+deliver(identity);assert.equal(reloads,0);
+const mismatch=fixture('/sop/',frame);
+mismatch.respond('/api/session',200,{mode:'gateway',user:'other',canWrite:true});
+await assert.rejects(mismatch.run('initializeAccess()'),/核对/);
+assert.equal(mismatch.run('access.canWrite'),false);
+deliver({...identity,account:'second'});
+assert.equal(reloads,1);assert.equal(frame.current,null);
+await assert.rejects(f.run("api('/api/plans',{changes:[]})"),/等待门户账号/);
+console.log('PASS: iframe origin, delayed login, account binding, role code zero and switching accounts.');
