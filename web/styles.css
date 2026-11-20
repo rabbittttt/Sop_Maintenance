@@ -1026,14 +1026,11 @@ input[aria-readonly="true"]{background:#f1f4f8;color:#4c5e73}
 
 /* Workbench typography */
 :root {
-  --type-title: 24px;
+  --type-title: 19px;
   --type-section: 16px;
   --type-body: 14px;
   --type-table: 13px;
   --type-note: 12px;
-}
-@media (max-width: 640px) {
-  :root { --type-title: 20px; }
 }
 h1,
 .annual-heading h1,
