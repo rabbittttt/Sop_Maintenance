@@ -603,7 +603,9 @@ function indexData() {
 }
 async function load(render = true) {
   if(gridDraft)throw new Error('请先保存或取消表内修改，再刷新数据');
-  const freshState=await api('/api/state');if(gridDraft)throw new Error('请先保存或取消表内修改，再刷新数据');state=freshState;optionRequestId++;optionMix=null;optionMixError='';generationViewError=state.generation_view?.error||'';generationErrorKind='rules';indexData();await restoreInitialView();
+  const freshState=await api('/api/state');
+  if (!Array.isArray(freshState?.products)) throw new Error('未能读取车型数据，请刷新重试。');
+  if(gridDraft)throw new Error('请先保存或取消表内修改，再刷新数据');state=freshState;optionRequestId++;optionMix=null;optionMixError='';generationViewError=state.generation_view?.error||'';generationErrorKind='rules';indexData();await restoreInitialView();
   target ||= state.current_month; matchMonth ||= shift(state.current_month,-1); metric = 'locked_orders';
   if(render) await renderPage();
   applyAccessControls();
@@ -1641,6 +1643,7 @@ async function renderReconcilePage() {
 async function renderPage() {
   $('#page-title').textContent=titles[page];
   $$('[data-page]').forEach(b=>{b.classList.toggle('active',b.dataset.page===page);b.setAttribute('aria-current',b.dataset.page===page?'page':'false');});
+  if (!state) return; // The selected tab will render when the initial state arrives.
   if(page==='reconcile')return renderReconcilePage();
   if(generationViewError&&page!=='history')return showGenerationError(generationViewError);
   if(page==='planning')planning();else if(page==='option-split')await optionPage();else if(page==='history')await historyPage();else if(page==='matching')await matchingPage();else dataPage();
@@ -1850,10 +1853,15 @@ document.addEventListener('input',e=>{
   if(gridDraft){if(gridLocked())return;if(e.target.dataset.gridGroup){gridChangeModel(e.target.dataset.gridGroup,e.target.dataset.gridGroupField,e.target.value);return;}const row=gridRow(e.target.dataset.gridId);if(row){if(e.target.dataset.gridMonth)row.values[e.target.dataset.gridMonth]=e.target.value;else if(e.target.dataset.gridField)row[e.target.dataset.gridField]=e.target.value;e.target.removeAttribute('aria-invalid');e.target.classList.add('changed');gridDraft.request=null;return;}if(e.target.id==='grid-owner'){if(!hasTrustedOperator())gridDraft.owner=e.target.value;return;}if(e.target.id==='grid-reason'){gridDraft.reason=e.target.value;return;}return;}
   if(e.target.id==='table-view-name'){viewNameDraft=e.target.value;return;}
   if(e.target.id==='version-search'){clearTimeout(searchTimer);query=e.target.value;searchTimer=setTimeout(async()=>{const pos=e.target.selectionStart;await renderPage();const inp=$('#version-search');if(inp){inp.focus();inp.setSelectionRange(pos,pos)}},300);}});
-$('#refresh-btn')?.addEventListener('click',async()=>{try{await load();toast('已载入最新计划');}catch(err){toast(err.message,true);}});
+let startupRequest;
+function startDashboard() {
+  startupRequest ??= initializeAccess().then(() => load()).finally(() => { startupRequest = null; });
+  return startupRequest;
+}
+$('#refresh-btn')?.addEventListener('click',async()=>{try{await (state ? load() : startDashboard());toast('已载入最新计划');}catch(err){toast(err.message,true);}});
 window.addEventListener('beforeunload',e=>{if(gridDraft && (!frameAccount || frameAccount.current)){e.preventDefault();e.returnValue='';}});
 window.addEventListener('unhandledrejection',e=>toast(e.reason?.message||'加载失败，请重试',true));
-initializeAccess().then(()=>load()).catch(err=>{$('#app').innerHTML=`<div class="empty-state"><h1>暂时无法连接数据服务</h1><p>${esc(err.message)}</p><p>${access.gateway?'请联系应用负责人检查内网业务服务，稍后刷新重试。':'请使用项目中的启动脚本打开看板。'}</p></div>`;});
+startDashboard().catch(err=>{$('#app').innerHTML=`<div class="empty-state"><h1>暂时无法连接数据服务</h1><p>${esc(err.message)}</p><p>${access.gateway?'请联系应用负责人检查内网业务服务，稍后刷新重试。':'请使用项目中的启动脚本打开看板。'}</p></div>`;});
 
 // Rule changes also refresh an absent maintenance workbook's current view.
 setInterval(pollWorkbookStatus,15000);

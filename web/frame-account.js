@@ -1,12 +1,12 @@
 // Install before the deferred application starts so iframe load messages are retained.
 window.sopFrameAccount = (() => {
   if (window.parent === window) return null;
-  const origin = document.querySelector('meta[name="sop-parent-origin"]').content || location.origin;
+  const extraOrigin = document.querySelector('meta[name="sop-parent-origin"]').content;
   let identity = null;
   let resolve;
   const ready = new Promise(done => { resolve = done; });
   window.addEventListener('message', event => {
-    if (event.source !== window.parent || event.origin !== origin) return;
+    if (event.source !== window.parent || (event.origin !== location.origin && event.origin !== extraOrigin)) return;
     const data = event.data;
     if (!data || typeof data !== 'object' || !Object.hasOwn(data, 'account')) return;
     const field = value => typeof value === 'string' ? value.trim() : '';

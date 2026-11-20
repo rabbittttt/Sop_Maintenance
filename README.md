@@ -96,7 +96,7 @@
 
 ### iframe 账号接入
 
-在 iframe 的 `load` 事件里发送当前账号。切换账号后，SOP 会重新加载该 iframe，以清除上一账号的草稿和视图。
+外层系统在**工作台 iframe** 的 `load` 事件里发送当前账号，工作台保存本次页面会话的账号并转发给 SOP。切换账号后 SOP 重新加载，清除上一账号的草稿和视图。
 
 ```js
 iframeRef.value?.contentWindow?.postMessage(
@@ -105,6 +105,6 @@ iframeRef.value?.contentWindow?.postMessage(
 );
 ```
 
-SOP 默认接收同源父窗口的消息。跨源嵌入时，在 SOP 服务设置 `SOP_PARENT_ORIGIN` 为外层页面的完整来源（协议、域名及端口）。角色随账号传递，部门成员共用业务权限。
+工作台与 SOP 同源时，最外层系统可以跨源，无需设置 `SOP_PARENT_ORIGIN`。仅当 SOP 的直接父窗口跨源时，设置该变量为直接父窗口的来源。本地启动或本机预览直接打开工作台时，SOP 以 `local-debug` 测试维护和个人视图。
 
 收到三个字段后，SOP 使用 `account` 记录网页维护、Excel 导入和个人视图归属。身份由外层声明，SOP 不另查账号目录。外层代理仍校验部门访问和服务写入开关。原有历史记录按原账号保存。
