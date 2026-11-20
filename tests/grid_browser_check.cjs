@@ -203,7 +203,9 @@ async function main() {
     await newField('version').fill('新增Lite');
     await cell(newId,'2026-10').fill('5');
     const requestsBefore=stateRequests;
-    await page.locator('#refresh-btn').click();
+    assert.equal(await page.locator('#refresh-btn').isVisible(),false);
+    assert.equal(await page.locator('.plan-actions button').allTextContents().then(labels=>labels.join(',')),'保存修改,取消');
+    assert.equal(await page.locator('.sheet-tools .display-toggles').count(),1);
     await page.evaluate(()=>pollWorkbookStatus());
     await page.locator('[data-page="history"]').click();
     assert.equal(stateRequests,requestsBefore,'Refreshing or polling cannot replace an active draft');

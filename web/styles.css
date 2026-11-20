@@ -1132,3 +1132,21 @@ body,
 .app-brand, .top-nav .nav-item, .brand-tab, .segmented button, .rec-segmented button {
   font-family: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei UI", sans-serif;
 }
+
+
+@media screen {
+  .app-header { grid-template-columns: auto minmax(0, 1fr); }
+  .header-actions { justify-content: flex-end; gap: 10px; max-width: 100%; }
+  #source-dates { justify-content: flex-end; gap: 2px 12px; margin: 0; }
+  #source-dates span { white-space: nowrap; }
+  #refresh-btn { flex-shrink: 0; }
+  body:has(.grid-editing) #refresh-btn { display: none; }
+}
+.plan-controls .annual-filters { flex: 0 1 auto; }
+.annual-toolbar .plan-actions { margin-inline-start: auto; }
+.plan-toggle-group { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 3px; }
+.display-toggles .plan-toggle-group + .plan-toggle-group { padding-inline-start: 6px; border-inline-start: 1px solid var(--border); }
+@media (max-width: 700px) {
+  #source-dates { font-size: 11px; line-height: 1.25; }
+  .header-actions { gap: 4px; }
+}
