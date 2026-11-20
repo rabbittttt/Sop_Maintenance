@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  --bg: #f3f4f6;
+  --bg: #f0f2f5;
   --surface: #ffffff;
   --surface-soft: #f7f8fa;
   --navy: #0b0d17;
@@ -9,7 +9,7 @@
   --border: #e5e7ed;
   --border-strong: #ccd1dc;
   --focus: #59616d;
-  --sheet-header: var(--primary);
+  --sheet-header: var(--surface-soft);
   --plan-total: #b42323;
   --primary: #2859f5;
   --primary-hover: #2049d4;
@@ -586,7 +586,7 @@ dialog .subtitle { margin-bottom: 23px; }
 .sheet-sync.synced .status-dot { background: #448570; }
 .sheet-sync.warn { color: #916312; }
 .sheet-sync.warn .status-dot { background: #af7e26; }
-.annual-sheet { --plan-name-width: 200px; --plan-metric-width: 80px; --plan-month-width: 64px; --plan-total-width: 100px; margin-bottom: 0 !important; border-radius: 0; }
+.annual-sheet { --plan-name-width: 200px; --plan-metric-width: 80px; --plan-month-width: 64px; --plan-total-width: 100px; margin-bottom: 0 !important; border-radius: var(--radius); }
 .annual-sheet.rolling-sheet { --plan-month-width: 68px; --plan-total-width: 100px; }
 .annual-sheet .table-scroll { scroll-padding-top: 48px; scroll-padding-left: calc(var(--plan-name-width) + var(--plan-metric-width) + 8px); }
 @media screen {
@@ -605,10 +605,10 @@ dialog .subtitle { margin-bottom: 23px; }
 }
 .annual-sheet .plan-table { width: max(100%, calc(var(--plan-name-width) + var(--plan-metric-width) + var(--plan-month-count, 12) * var(--plan-month-width) + var(--plan-total-width))); table-layout: fixed; color: var(--text); }
 .annual-sheet .plan-table th, .annual-sheet .plan-table td { min-width: 0; padding: 4px 7px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); line-height: 1.4; vertical-align: middle; font-size: 12px; }
-.annual-sheet .plan-table thead tr:first-child > th { top: 0; height: 40px; text-align: center; color: #fff; background: var(--sheet-header); border-bottom: 1px solid var(--border-strong); padding: 7px 5px; font-size: 12px; font-weight: 650; }
-.annual-sheet .plan-table thead th.sticky-name, .annual-sheet .plan-table thead th.sticky-metric { color: #fff; background: var(--sheet-header); }
-.annual-sheet .plan-table thead tr:first-child > th.selected-month { background: var(--sheet-header); color: #fff; }
-.annual-sheet .plan-table .month-tag { display: block; color: #fff; background: none; border: 0; margin: 1px 0 -2px; font-size: var(--type-note); font-weight: 500; line-height: 1.2; }
+.annual-sheet .plan-table thead tr:first-child > th { top: 0; height: 40px; text-align: center; color: var(--navy); background: var(--sheet-header); border-bottom: 1px solid var(--border-strong); padding: 7px 5px; font-size: 12px; font-weight: 650; }
+.annual-sheet .plan-table thead th.sticky-name, .annual-sheet .plan-table thead th.sticky-metric { color: var(--navy); background: var(--sheet-header); }
+.annual-sheet .plan-table thead tr:first-child > th.selected-month { background: var(--blue-soft); color: var(--primary-hover); }
+.annual-sheet .plan-table .month-tag { display: block; color: var(--muted); background: none; border: 0; margin: 1px 0 -2px; font-size: var(--type-note); font-weight: 500; line-height: 1.2; }
 .annual-sheet .plan-table .selected-month .month-tag { color: inherit; }
 .annual-sheet .plan-table th.sticky-name { width: var(--plan-name-width); min-width: var(--plan-name-width); max-width: var(--plan-name-width); left: 0; padding-left: 12px; border-right-color: #acb5c0; }
 .annual-sheet .plan-table td.sticky-metric, .annual-sheet .plan-table th.sticky-metric { width: var(--plan-metric-width); min-width: var(--plan-metric-width); max-width: var(--plan-metric-width); left: var(--plan-name-width); padding: 6px; text-align: center; border-right-color: #a7b2bf; }
@@ -660,7 +660,7 @@ dialog .subtitle { margin-bottom: 23px; }
 .annual-sheet .plan-table tbody .annual-total strong { font-size: inherit; font-weight: 700; }
 .annual-sheet .plan-table .annual-total small { font-size: var(--type-note); line-height: 1.15; color: #596473; }
 .annual-sheet.rolling-sheet .plan-table tbody td.number { font-size: 16px; }
-.annual-sheet .plan-table thead tr:first-child > th.past-month { color: #fff; background: var(--sheet-header); }
+.annual-sheet .plan-table thead tr:first-child > th.past-month { color: var(--muted); background: var(--sheet-header); }
 .annual-sheet .plan-table tbody tr > .past-month,
 .annual-sheet .plan-table tbody tr:hover > .past-month,
 .annual-sheet .plan-table tbody tr:focus-within > .past-month { background: var(--bg); }
@@ -934,7 +934,7 @@ input[aria-readonly="true"]{background:#f1f4f8;color:#4c5e73}
 .option-sheet .table-scroll { max-height:calc(100dvh - 245px); }
 .option-table { --option-name-width:220px; border-collapse:separate; border-spacing:0; width:max-content; min-width:100%; font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .option-table th,.option-table td { min-width:88px; padding:5px 9px; border-right:1px solid var(--border); border-bottom:1px solid var(--border); text-align:right; }
-.option-table thead th { position:sticky; top:0; z-index:4; background:#eef3fa; height:36px; font-weight:650; color:#365270; }
+.option-table thead th { position:sticky; top:0; z-index:4; background:var(--sheet-header); height:36px; font-weight:650; color:#365270; }
 .option-table .option-name { position:sticky; left:0; z-index:2; min-width:var(--option-name-width); width:var(--option-name-width); max-width:var(--option-name-width); text-align:left; background:#fff; box-shadow:4px 0 7px -6px #23344f75; }
 .option-table .option-share { position:sticky; left:var(--option-name-width); z-index:2; min-width:118px; width:118px; text-align:right; background:#fff; }
 .option-table thead .option-name,.option-table thead .option-share { z-index:6; background:#eef3fa; }
@@ -988,7 +988,7 @@ input[aria-readonly="true"]{background:#f1f4f8;color:#4c5e73}
 .rec-count,.rec-period { color:var(--muted); font-size:12px; }
 .rec-table { width:100%; border-collapse:separate; border-spacing:0; font-size:12px; }
 .rec-table th,.rec-table td { padding:6px 10px; border-bottom:1px solid var(--border); text-align:left; white-space:nowrap; }
-.rec-table thead th { position:sticky; top:0; z-index:1; background:#eef3fa; color:#365270; }
+.rec-table thead th { position:sticky; top:0; z-index:1; background:var(--sheet-header); color:var(--text); }
 .rec-table td.rec-number { text-align:right; font-variant-numeric:tabular-nums; font-weight:600; }
 .rec-table td.rec-shortfall { color:var(--red); }
 .rec-table td.empty-state { text-align:center; }
