@@ -58,7 +58,8 @@ class WorkbenchLauncherTest(unittest.TestCase):
         rules = Path(self.temp.name) / "订单分析/scripts/config/shared_config.py"
         rules.parent.mkdir(parents=True)
         rules.write_text("MERGE_GROUPS = {}\n", encoding="utf-8")
-        self.env = {**os.environ, "SOP_PYTHON_PATH": sys.executable, "SOP_EXCEL_ENGINE": "python",
+        self.env = {**os.environ, "PLANHUB_DATA_ROOT": str(self.root.parent / "工作台数据"),
+                    "SOP_DATA_DIR": str(self.root / "data"), "SOP_SHARED_CONFIG": str(rules), "SOP_PYTHON_PATH": sys.executable, "SOP_EXCEL_ENGINE": "python",
                     "PYTHONIOENCODING": "utf-8"}
         self.processes, self.handles = [], []
         self.service_processes = {}

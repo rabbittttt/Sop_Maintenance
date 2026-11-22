@@ -144,6 +144,14 @@ class SourceRefreshTest(unittest.TestCase):
         self.assertEqual(calls[-1], "sheet")
         self.assertEqual(self.sales.read_bytes(), previous)
 
+    def test_failed_first_publish_leaves_no_sales_file(self):
+        self.sales.unlink()
+        with patch.object(self.store, "record_sales", side_effect=RuntimeError("failure")):
+            with self.assertRaises(RuntimeError):
+                self.watcher.refresh()
+        self.assertFalse(self.sales.exists())
+        self.assertEqual(list(self.root.glob(".sales-*.pending.json")), [])
+
     def test_failed_publish_restores_original_file(self):
         previous = self.sales.read_bytes()
         with patch.object(self.store, "record_sales", side_effect=RuntimeError("failure")):

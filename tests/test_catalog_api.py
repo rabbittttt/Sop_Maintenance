@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from server import make_handler
+from sop.refresh import SalesRefresh
 from sop.store import SOPStore, TZ, ValidationError
 
 
@@ -37,7 +38,9 @@ class CatalogAPITest(unittest.TestCase):
         self.store = SOPStore(self.root / "test.sqlite3", sales, lambda: datetime(2026, 10, 23, 12, tzinfo=TZ))
         self.sync = SheetSync()
         self.http = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
-        self.http.RequestHandlerClass = make_handler(self.store, self.root, self.http.server_port, self.sync)
+        self.now = 0
+        self.refresh = SalesRefresh(self.store, self.sync, root=self.root, clock=lambda: self.now)
+        self.http.RequestHandlerClass = make_handler(self.store, self.root, self.http.server_port, self.sync, source_refresh=self.refresh)
         self.thread = threading.Thread(target=lambda: self.http.serve_forever(poll_interval=0.02), daemon=True)
         self.thread.start()
 
@@ -103,8 +106,12 @@ class CatalogAPITest(unittest.TestCase):
                 output_path.write_text(json.dumps(candidate), encoding="utf-8")
                 return candidate
 
-        with patch("server.importlib.import_module", return_value=Reader), patch.object(self.store, "validate_source_data", side_effect=ValidationError("来源冲突")):
-            code, _ = self.request("POST", {}, "/api/refresh")
+        with patch.object(self.refresh, "reader", Reader.refresh), patch.object(self.store, "validate_source_data", side_effect=ValidationError("来源冲突")):
+            code, waiting = self.request("POST", {}, "/api/refresh")
+            self.assertEqual((code, waiting["status"]), (200, "waiting"))
+            self.now += self.refresh.stable_seconds
+            code, error = self.request("POST", {}, "/api/refresh")
+            self.assertIn("来源冲突", error["error"])
         self.assertEqual(code, 400)
         self.assertEqual(self.store.sales_path.read_bytes(), previous)
         self.assertEqual(list(self.root.glob(".sales-*.pending.json")), [])

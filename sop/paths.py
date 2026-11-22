@@ -41,6 +41,7 @@ def service_log_directory(root):
 
 
 def runtime_data_directory(root):
+    """Prefer SOP_DATA_DIR (relative to root if needed), then the central database directory."""
     return project_path(root, os.environ["SOP_DATA_DIR"]) if os.environ.get("SOP_DATA_DIR") else persistent_directory(root)
 
 

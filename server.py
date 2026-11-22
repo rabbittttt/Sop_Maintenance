@@ -120,6 +120,7 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "SOPLocal/1.0"
+        timeout = 60  # Maximum socket inactivity while receiving a request.
 
         def send_response(self, code, message=None):
             super().send_response(code, message)
@@ -290,7 +291,13 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
             try:
                 encoded = self.rfile.read(length)
                 self.request_body_consumed = True
+                if len(encoded) != length:
+                    raise ValidationError("请求内容不完整。")
                 value = json.loads(encoded.decode("utf-8"))
+            except TimeoutError:
+                self.request_body_consumed = True
+                self.close_connection = True
+                raise GatewayError("读取请求超时。", 408)
             except (UnicodeDecodeError, json.JSONDecodeError):
                 raise ValidationError("JSON 格式无效。")
             if not isinstance(value, dict):
@@ -298,7 +305,9 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
             return value
 
         def _handle_error(self, error):
-            if isinstance(error, ConflictError):
+            if isinstance(error, GatewayError):
+                self._json({"error": str(error)}, error.status)
+            elif isinstance(error, ConflictError):
                 self._json({"error": str(error), "conflicts": error.conflicts,
                             **({"source": error.source} if getattr(error, "source", None) else {})}, 409)
             elif isinstance(error, (ValidationError, MergeRuleError)):
@@ -387,7 +396,7 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                     if self.command != "HEAD":
                         self.wfile.write(encoded)
                 elif path == "/api/history":
-                    self._json(store.history(query.get("product_id"), query.get("month")))
+                    self._json(store.history(query.get("product_id"), query.get("month"), query.get("entity")))
                 elif path == "/api/backups/status" and snapshot_backup:
                     self._json(snapshot_backup.status())
                 elif path == "/api/committee-decisions":

@@ -110,7 +110,7 @@ class SalesMetricSafetyTests(unittest.TestCase):
             (root / "data" / "source_settings.json").write_text(
                 json.dumps({"version_lock_basis": "model_lock_row"}), encoding="utf-8")
             source, models = fixture()
-            with patch.object(sop_data, "ROOT", root), \
+            with patch.dict(os.environ, {"SOP_DATA_DIR": str(root / "data")}), patch.object(sop_data, "ROOT", root), \
                  patch.object(sop_data, "_extract_version_reference", return_value=source), \
                  patch.object(sop_data, "_model_monthly_locks", return_value=models):
                 result = sop_data.extract()

@@ -90,6 +90,18 @@ class StoreTest(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             self.store.db.execute("UPDATE events SET owner='changed'")
 
+    def test_history_filters_entity_before_applying_limit(self):
+        self.save(self.plan())
+        self.store.db.execute("""WITH RECURSIVE seq(n) AS (
+            VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n<2000)
+            INSERT INTO events(entity,action,product_id,month,entity_key,before_json,
+                after_json,owner,reason,notes,recorded_at)
+            SELECT 'shipment','update',product_id,month,entity_key,NULL,'{}',owner,
+                reason,notes,recorded_at FROM events,seq WHERE entity='plan'""")
+        self.assertEqual(len(self.store.history()["items"]), 2000)
+        filtered = self.store.history("a", "2026-10", "plan")["items"]
+        self.assertEqual([row["entity"] for row in filtered], ["plan"])
+
     def test_elapsed_month_keeps_sop_and_rejects_a_mixed_save_at_business_midnight(self):
         october, november = "2026-10", "2026-11"
         self.current = datetime(2026, 10, 31, 15, 59, 59, tzinfo=timezone.utc)

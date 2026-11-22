@@ -160,6 +160,7 @@ def import_content(store, content, *, base_revision, owner):
 
 
 def export_content(store, body):
+    from .export import MAX_QUANTITY_CELLS
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
@@ -190,6 +191,9 @@ def export_content(store, body):
             names[model_key(brand, model)] = brand, model
         if not names:
             raise ValidationError("暂无可导出的车型，请先新增车型或导入要货计划。")
+        quantity_columns = len(months) + sum(month.endswith("-12") for month in months)
+        if len(names) * quantity_columns > MAX_QUANTITY_CELLS:
+            raise ValidationError("要货计划导出范围过大，请减少车型或月份。")
         values = {(model_key(row["brand"], row["model"]), row["month"]): row["quantity"] for row in records}
         ordered = sorted(names.items(), key=lambda item: (brand_order_key(item[1][0]), item[1][1]))
     columns = []
@@ -230,7 +234,8 @@ def export_content(store, body):
                 known = [values[(key, f"{value}-{month:02d}")] for month in range(1, 13) if (key, f"{value}-{month:02d}") in values]
                 row.append(sum(known) if known else None)
         sheet.append(row)
-        for cell in sheet[number]:
+        for col in range(1, len(columns) + 3):
+            cell = sheet.cell(number, col)
             if cell.column <= 2:
                 cell.data_type = "s"
             cell.font = Font(name="微软雅黑", size=11, bold=True)

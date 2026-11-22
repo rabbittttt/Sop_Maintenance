@@ -31,6 +31,12 @@ class DemandTest(unittest.TestCase):
                               lambda: datetime(2026, 11, 17, 12, tzinfo=TZ))
         self.addCleanup(self.store.close)
 
+    def test_export_limit_counts_annual_columns_before_recording_baseline(self):
+        body = {"months": ["2026-12"], "models": [{"brand": "A", "model": "B"}]}
+        with patch("sop.export.MAX_QUANTITY_CELLS", 1), self.assertRaises(ValidationError):
+            demand.export_content(self.store, body)
+        self.assertEqual(self.store.db.execute("SELECT COUNT(*) FROM demand_export_baselines").fetchone()[0], 0)
+
     def table(self, rows, headers=None):
         book = Workbook()
         sheet = book.active

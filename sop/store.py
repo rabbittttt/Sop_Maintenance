@@ -1275,7 +1275,7 @@ class SOPStore:
             saved.append(row)
         return saved
 
-    def history(self, product_id=None, month=None):
+    def history(self, product_id=None, month=None, entity=None):
         sql, args = "SELECT * FROM events WHERE 1=1", []
         if product_id:
             sql += " AND product_id=?"
@@ -1283,6 +1283,9 @@ class SOPStore:
         if month:
             sql += " AND month=?"
             args.append(validate_month(month))
+        if entity:
+            sql += " AND entity=?"
+            args.append(entity)
         sql += " ORDER BY id DESC LIMIT 2000"
         with self.lock:
             records = []
@@ -1333,9 +1336,16 @@ class SOPStore:
     def _snapshot(self, cutoff, business_date, kind, label, auto_key=None, inclusive=False):
         cutoff_text = stamp(cutoff)
         operator = "<=" if inclusive else "<"
-        rows = self.db.execute(f"SELECT * FROM events WHERE recorded_at {operator} ? ORDER BY id", (cutoff_text,)).fetchall()
+        # Only the last value of each key survives replay. Keep first-seen key order.
+        rows = self.db.execute(f"""WITH latest AS (
+            SELECT MAX(id) AS last_id, MIN(id) AS first_id FROM events
+            WHERE recorded_at {operator} ? GROUP BY entity, entity_key)
+            SELECT e.id,e.entity,e.entity_key,e.after_json FROM latest
+            JOIN events e ON e.id=latest.last_id ORDER BY latest.first_id""", (cutoff_text,))
+        last_event_id = None
         state = {"plan": {}, "shipment": {}, "demand": {}}
         for row in rows:
+            last_event_id = max(last_event_id or 0, row["id"])
             state[row["entity"]][row["entity_key"]] = json.loads(row["after_json"])
         sales = self.db.execute(f"SELECT * FROM sales_versions WHERE recorded_at {operator} ? ORDER BY recorded_at DESC,id DESC LIMIT 1", (cutoff_text,)).fetchone()
         payload = json.loads(sales["payload"]) if sales else {"products": [], "sales": [], "meta": {}, "sources": []}
@@ -1359,7 +1369,7 @@ class SOPStore:
             self._freeze_summary_plans(payload, frozen_groups)
             payload["generation_rules"] = {"signature": rule_version["signature"], "groups": frozen_groups}
         payload["meta"] = {**payload.get("meta", {}), "snapshot_cutoff_at": cutoff_text,
-                           "history_event_id": rows[-1]["id"] if rows else None,
+                           "history_event_id": last_event_id,
                            "sales_version_id": sales["id"] if sales else None,
                            "catalog_version_id": catalog["id"] if catalog else None,
                            "months": month_range(snap_month, horizon(snap_month, settings["bridge_m6"])),

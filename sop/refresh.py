@@ -74,7 +74,9 @@ class SalesRefresh:
                     published = True
                     data = self.store.record_sales()
                 except Exception:
-                    if published and previous is not None:
+                    if published and previous is None:
+                        self.store.sales_path.unlink(missing_ok=True)
+                    elif published:
                         pending.write_bytes(previous)
                         os.replace(pending, self.store.sales_path)
                     raise
