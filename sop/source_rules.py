@@ -119,7 +119,7 @@ def load_merge_rules(path=None):
     label = CONFIG_RELATIVE_PATH.as_posix() if path == DEFAULT_CONFIG_PATH else str(path)
     try:
         source = path.read_bytes()
-        tree = ast.parse(source.decode("utf-8-sig"), filename=label)
+        tree = ast.parse(source, filename=label)
         assignments = [node for node in tree.body if isinstance(node, (ast.Assign, ast.AnnAssign))
                        and any(isinstance(target, ast.Name) and target.id == "MERGE_GROUPS"
                                for target in (node.targets if isinstance(node, ast.Assign) else [node.target]))]

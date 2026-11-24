@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import unittest
@@ -96,6 +97,15 @@ class GenerationModeTest(unittest.TestCase):
         self.assertEqual(plan["sop"], 0)
         self.assertTrue(plan["partial"])
         self.assertEqual(state["generation_view"]["warnings"], [])
+
+    def test_shared_config_encoding_and_raw_signature(self):
+        for encoding, header in [('utf-8-sig', ''), ('gbk', '# coding: gbk\n')]:
+            with self.subTest(encoding=encoding):
+                source = (header + 'MERGE_GROUPS = ' + repr(self.groups)).encode(encoding)
+                self.rules.write_bytes(source)
+                rules = load_merge_rules(self.rules)
+                self.assertEqual(rules['groups'], self.groups)
+                self.assertEqual(rules['signature'], hashlib.sha256(source).hexdigest())
 
     def test_alias_does_not_hide_explicit_member_and_invalid_groups_fail_closed(self):
         self.assertNotIn("问界 M5 2026款", summary_names(load_merge_rules()))
