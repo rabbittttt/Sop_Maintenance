@@ -1,6 +1,6 @@
 # SOP 单一源码与门户接入
 
-本仓库是 SOP 的唯一业务源码，项目文件夹为“SOP维护”。相对同级“计划工作台”门户根目录的默认位置为 `../SOP维护`，合并前基线为 `eec3b69`。从本仓库看，门户默认位于 `../计划工作台`，应先核对实际布局；门户仓库仅维护前端入口、接入配置和部署工具，不再维护 `services/sop` 业务源码或回合并补丁。
+本仓库维护 SOP 的服务、页面和发布脚本。开发工作区把 `SOP维护` 和 `计划工作台` 放在 `Project` 下，门户通过固定前缀 `/sop/` 接入独立服务。
 
 ## 独立运行
 
@@ -12,20 +12,20 @@
 
 `plan_file`、`--plan-file` 和 `SOP_PLAN_DIR` 仅保留旧配置兼容。当前服务不再监控、回读或生成服务器上的维护表，已有文件保留不动；计划以持久数据库为准，通过网页保存，或从页面导出 Excel、修改后再导入。`source_dir` 仍只选择销售输入。
 
-网关校验回环代理和随机 key，POST 还校验 Origin。部门成员统一使用业务功能，不区分只读/可写角色，不检查额外写入域组。新部署配置显式设置 `AllowWrites: true`（IIS 桥接）与 `allow_writes: true`（后端）；开关只用于全服务维护暂停，未配置的后端仍保持关闭写入。前端探测服务状态，连接校验失败或全局暂停时禁用写操作。网页保存、Excel 导入和个人视图使用外层系统经工作台传给 SOP 的 account。后端以请求携带的门户声明覆盖业务表单中的维护人，不独立验证个人身份。有门户访问权的用户可以自报其他账号，因此该记录仅作业务署名。IIS Windows 身份桥接源码位于 `integration/iis/SopIdentityBridge.cs`，由当前项目的发布产物提供，门户不保留第二份身份模块源码。
+SOP 网关校验可信代理和密钥，POST 还校验 Origin。PlanHub 的 Docker 发布版从包外 `planhub-runtime/config.json` 读取 `publicOrigin`、`sopSecret` 和 `sopSharedConfig`，启动时派生 `config/sop-local.json`。正式入口由公司认证网关核实部门访问资格，门户转发受信请求。后端 `allow_writes` 是全服务维护开关，门户正常运行时设为 `true`。网页保存、Excel 导入和个人视图采用外层系统传给 SOP 的账号；该账号用于业务署名。
 
-门户本地预览直接从本仓库启动 Python，默认使用原项目的持久数据库，维护立即保存且重启保留；可通过门户公开配置选择其他持久数据目录。只有显式传入 `--snapshot` 才为测试创建隔离副本，测试写入不回写原项目；`--seed-from` 必须配合 `--snapshot` 使用。独立模式和代理模式共用同一套业务实现。
+源码联调从本仓库启动 Python，默认与独立入口共用 `../工作台数据/database/sop/`。发布包的 `preview.cmd` 和正式容器默认共用包外 `planhub-runtime/database/sop/`、共享来源及 `logs/sop/`；两种方式应先停一方再启动另一方。源码联调使用 `--snapshot`、发布包本机试运行使用 `preview.cmd -Snapshot` 时才创建隔离数据副本。
 
 ## 发布产物
 
-运行 `../.venv/Scripts/python.exe scripts/build_release.py --destination <全新绝对目录>` 构建发布目录（非 Windows 使用 `../.venv/bin/python`）。`sop-release.json` 记录源码提交、工作区状态和每个发布文件的 SHA256。发布内容不包含业务数据库、Excel、真实共享规则、机密、Git 元数据或测试输出。
+从本项目运行 `../.venv/Scripts/python.exe scripts/build_release.py --destination <项目目录以外的全新绝对路径>` 构建 SOP 原始发布目录。非 Windows 环境使用 `../.venv/bin/python`。`sop-release.json` 记录源码提交、工作区状态和发布文件的 SHA-256。业务数据库、Excel、真实共享规则和机密由运行环境提供。
 
-门户打包只接受通过 manifest 校验的 SOP 发布目录，部署包中的 `services/sop` 是只读发布产物布局，不是需要在门户维护的第二份源码。更新 SOP 应修改本仓库、验证并重新构建产物。
+门户校验 `sop-release.json` 后，把 SOP 原包封装进交付目录的 `releases/sop/`。若只更新 SOP，在计划工作台使用 `发布应用.bat` 选择对应应用，在目标机切换和验证该应用版本。
 
 ## 验证与运维边界
 
 Python 业务/HTTP/导入导出测试与 Node 前端测试在本仓库运行。门户中的相关测试只验证接入、启动参数、发布文件完整性和代理行为。测试使用隔离数据。
 
-内网域名、Windows 服务账号、部门访问边界、HTTPS 与 IIS/ARR 仍需在目标服务器由管理员配置并验收；源码合并与构建不会自动修改这些设置。
+正式环境由部署人员配置公司认证入口、HTTPS、运行目录及部门访问边界，使用应用健康检查和实际业务页面分别验收。
 
-旧版 `WriteGroups` 配置需与旧身份桥接 DLL 一起迁移，不能仅修改后端开关；先备份，重建本仓库发布产物，再由管理员审阅并更新成显式 `AllowWrites` 配置。不得自动修改 IIS/安全设置。
+历史 IIS 安装仍可在 `integration/iis/SopIdentityBridge.cs` 查阅旧身份桥行为。该模块与旧端的 `AllowWrites` 配置配套，Docker 交付使用工作台网关。
