@@ -99,7 +99,7 @@ async function main() {
         return route.fulfill({json:record});
       }
       if(url.pathname==='/api/state'){stateRequests++;return route.fulfill({json:state});}
-      if(url.pathname==='/api/plan-workbook/status')return route.fulfill({json:{status:'absent',generation_view:state.generation_view}});
+      if(url.pathname==='/api/status')return route.fulfill({json:{status:'absent',generation_view:state.generation_view}});
       if(url.pathname==='/api/settings') {
         state=fixture(route.request().postDataJSON().generation_mode);
         return route.fulfill({json:{ok:true,settings:state.settings}});
@@ -130,11 +130,43 @@ async function main() {
         return route.fulfill({body:Buffer.from('PKtest'),contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
       }
       if(url.pathname.startsWith('/api/'))throw new Error('Unexpected API: '+url.pathname);
+      if(url.pathname==='/toolbar-fixture') return route.fulfill({contentType:'text/html',
+        body:'<meta charset="utf-8"><style>*{box-sizing:border-box}body{margin:0}iframe{display:block;width:100vw;height:100vh;border:0}</style><iframe title="SOP" src="/"></iframe>'});
       const name=url.pathname==='/'?'index.html':url.pathname.slice(1);
       const contentType=name.endsWith('.js')?'application/javascript':name.endsWith('.css')?'text/css':name.endsWith('.svg')?'image/svg+xml':name.endsWith('.png')?'image/png':name.endsWith('.ico')?'image/x-icon':'text/html';
       return route.fulfill({body:await fs.readFile(path.join(root,'web',name)),contentType});
     };
     await page.route(`${origin}/**`,routeApp);
+    if(process.argv.includes('--check-toolbar') || process.argv.includes('--update-toolbar')) {
+      const update=process.argv.includes('--update-toolbar');
+      const baseline=path.join(out,'toolbar-baseline');
+      if(update)await fs.mkdir(baseline,{recursive:true});
+      await page.goto(origin+'/toolbar-fixture');
+      await page.evaluate(account => document.querySelector('iframe').contentWindow.postMessage(
+        {account,roleCode:'test',roleName:'验收'},location.origin),mainAccount);
+      const frame=page.frameLocator('iframe');
+      for(const width of [1440,1000]) {
+        await page.setViewportSize({width,height:900});
+        for(const mode of ['browse','edit']) {
+          const action=frame.locator('[data-action="bulk-plan"]');
+          await action.waitFor();
+          if(mode==='edit')await action.click();
+          const filename='toolbar-'+width+'-'+mode+'.png';
+          const image=await frame.locator('.plan-controls').screenshot({animations:'disabled',caret:'hide'});
+          if(update)await fs.writeFile(path.join(baseline,filename),image);
+          else {
+            const expected=await fs.readFile(path.join(baseline,filename));
+            if(!expected.equals(image)){
+              await fs.writeFile(path.join(out,filename),image);
+              throw new Error('工具栏与本机基准不同：'+filename);
+            }
+          }
+          if(mode==='edit')await frame.locator('[data-action="grid-cancel"]').click();
+        }
+      }
+      console.log(update?'已生成四份工具栏基准图':'四份工具栏基准图一致');
+      return;
+    }
     await page.goto(origin+'/');
     if(!origin.includes('127.0.0.1')) {
       assert.equal(await page.evaluate(()=>window.isSecureContext),false,'Use real insecure HTTP browser semantics');

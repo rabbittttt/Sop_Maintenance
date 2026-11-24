@@ -113,6 +113,11 @@ class DownloadContractTest(unittest.TestCase):
                 self.assertEqual(status, 200, content[:500])
                 self.assertIn("attachment", headers.get("Content-Disposition", ""))
                 self.assertTrue(content.startswith(b"PK"))
+                cached = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+                try:
+                    self.assertFalse(any(cell.data_type == "e" for row in cached["SOP计划"] for cell in row))
+                finally:
+                    cached.close()
                 original = self.fixture.root / f"download-{versions}-{locks}.xlsx"
                 original.write_bytes(content)
                 book = openpyxl.load_workbook(original, data_only=False)
@@ -141,7 +146,8 @@ class DownloadContractTest(unittest.TestCase):
                                    if item["product_id"] == self.parent["id"])
                         row = next(row for row in manifest["rows"] if row["key"] == key)
                     column = next(col["column"] for col in manifest["columns"] if col.get("month") == "2026-10")
-                    sheet.cell(row["row"], column).value = 100 + index
+                    self.assertEqual(sheet.cell(row["row"], column).number_format, "0")
+                    sheet.cell(row["row"], column).value = 3000 + index
                     # Save to the exact downloaded path, retaining the original
                     # hidden marker; no replacement template or version edits.
                     book.save(original)
@@ -152,7 +158,7 @@ class DownloadContractTest(unittest.TestCase):
                 result = json.loads(reply)
                 self.assertTrue(result["ok"])
                 self.assertEqual((result["imported"], result["created"]), (1, 0))
-                self.assertEqual(self.fixture.value(self.parent["id"]), 100 + index)
+                self.assertEqual(self.fixture.value(self.parent["id"]), 3000 + index)
                 self.assertEqual(self.source_plans(), source_plans)
                 self.assertEqual((self.fixture.value("a"), self.fixture.value("b")), (10, 20))
                 self.assertEqual(self.fixture.source.read_bytes(), self.source_before)

@@ -173,22 +173,10 @@ class SnapshotBackupTest(unittest.TestCase):
             server.server_close()
             thread.join(timeout=2)
 
-    def test_unit_manual_snapshot_imports_saved_sheet_and_blocks_conflict(self):
-        store = self.store
-
-        class SavedWorkbook:
-            _input_checked = True
-            mode = "pending"
-
-            def sync(self):
-                if self.mode == "pending":
-                    store.save_plans({"owner": "Excel计划表", "reason": "表格同步", "changes": [
-                        {"product_id": "a", "month": "2026-10", "sop": 555, "forecast": 888, "revision": 2}]})
-                return {"status": self.mode, "message": "测试同步状态", "conflicts": []}
-
-        saved_workbook = SavedWorkbook()
+    def test_unit_manual_snapshot_freezes_current_database(self):
+        expected = self.store.state()["plans"]
         server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
-        server.RequestHandlerClass = make_handler(self.store, self.root, server.server_port, saved_workbook, self.backup)
+        server.RequestHandlerClass = make_handler(self.store, self.root, server.server_port, snapshot_backup=self.backup)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
 
@@ -203,13 +191,8 @@ class SnapshotBackupTest(unittest.TestCase):
         try:
             code, result = create()
             self.assertEqual(code, 200)
-            self.assertEqual(result["plans"][0]["sop"], 555)
+            self.assertEqual(result["plans"], expected)
             self.assertEqual(result["excel_backup"]["status"], "ready")
-            saved_workbook.mode = "conflict"
-            self.assertEqual(create()[0], 409)
-            saved_workbook.mode = "error"
-            self.assertEqual(create()[0], 400)
-            self.assertEqual(len(self.store.snapshots()["items"]), 2)
         finally:
             server.shutdown()
             server.server_close()

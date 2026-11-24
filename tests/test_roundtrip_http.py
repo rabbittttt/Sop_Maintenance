@@ -55,7 +55,6 @@ class RoundtripHTTPTest(unittest.TestCase):
         self.http = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
         self.http.RequestHandlerClass = make_handler(
             NoBusinessAccess(), self.root, self.http.server_port,
-            workbook_sync=NoBusinessAccess(),
             plan_export=PlanExport(writer=fixture_writer, temp_root=self.root),
             plan_roundtrip=self.service)
         self.thread = threading.Thread(target=lambda: self.http.serve_forever(poll_interval=.02), daemon=True)
@@ -143,10 +142,10 @@ class MissingPrimaryWorkbookHTTPTest(unittest.TestCase):
 
             sync = WorkbookSync(store, workbook_path, writer=write_plan_workbook, auto_create=False)
             self.assertEqual(sync.sync()["status"], "absent")
-            service = PlanRoundtrip(store, sync)
+            service = PlanRoundtrip(store)
             server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
             server.RequestHandlerClass = make_handler(store, root, server.server_port,
-                workbook_sync=sync, plan_export=PlanExport(writer=write_export_workbook, temp_root=root),
+                plan_export=PlanExport(writer=write_export_workbook, temp_root=root),
                 source_refresh=NoBusinessAccess(), plan_roundtrip=service)
             thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=.02), daemon=True)
             thread.start()
@@ -183,19 +182,18 @@ class MissingPrimaryWorkbookHTTPTest(unittest.TestCase):
                 self.assertEqual(status, 200, content[:500])
                 result = json.loads(content)
                 self.assertEqual(result["imported"], 1)
-                self.assertEqual(result["workbook_sync"]["status"], "synced", result)
+                self.assertNotIn("workbook_sync", result)
                 self.assertEqual(store.db.execute("SELECT sop FROM plans WHERE product_id='a' AND month='2026-10'").fetchone()[0], 41)
-                self.assertTrue(workbook_path.is_file())
+                self.assertFalse(workbook_path.is_file())
 
                 connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=30)
                 try:
                     connection.request("GET", "/api/plan-workbook/download")
                     response = connection.getresponse()
-                    self.assertEqual(response.status, 200)
-                    self.assertTrue(response.read().startswith(b"PK"))
+                    self.assertEqual(response.status, 404)
                 finally:
                     connection.close()
-                self.assertTrue(workbook_path.exists())
+                self.assertFalse(workbook_path.exists())
             finally:
                 server.shutdown()
                 thread.join()

@@ -14,7 +14,7 @@ function element(id='',dataset={}) {
     getAttribute:name=>attrs.get(name),focus(){}};
 }
 function fixture(base='/sop/', frameAccount=null) {
-  const requests=[],controls=[element('',{action:'bulk-plan'}),element('',{action:'export-plan'}),element('',{action:'refresh-sales'}),element('',{action:'view-save'}),element('generation-filter'),element('bridge-toggle'),element('',{catalogEdit:'p1'}),element('',{action:'open-workbook'})];
+  const requests=[],controls=[element('',{action:'bulk-plan'}),element('',{action:'export-plan'}),element('',{action:'refresh-sales'}),element('',{action:'view-save'}),element('generation-filter'),element('bridge-toggle'),element('',{catalogEdit:'p1'})];
   const nodes=new Map(['access-status','grid-owner'].map(id=>['#'+id,element(id)]));
   const replies=new Map();
   const context=vm.createContext({URL,window:{sopFrameAccount:frameAccount},location:{href:'http://data.example'+base},
@@ -80,7 +80,6 @@ f.respond('/api/plans',200,{ok:true});
 await f.run('initializeAccess()');
 assert.equal(f.run('access.canWrite'),true);
 assert.equal(f.controls[0].disabled,false);
-assert.equal(f.controls[7].disabled,true,'A web user cannot open server desktop Excel');
 assert.equal(f.nodes.get('#access-status').hidden,true,'Successful access must not add a current-user banner');
 assert.equal(f.nodes.get('#access-status').textContent,'');
 await f.run("api('/api/plans',{owner:'CORP\\planner',changes:[]})");

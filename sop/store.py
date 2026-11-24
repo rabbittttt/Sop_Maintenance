@@ -11,6 +11,7 @@ import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
+from .snapshot_plans import compare_plans, freeze_summary_plans
 from .brand import brand_order_key
 from .plan_scope import MODEL_PLAN_LABEL, is_model_plan, effective_products, plan_total
 from .source_rules import (MergeRuleError, load_merge_rules, summary_names, project_generation_sources,
@@ -1275,6 +1276,11 @@ class SOPStore:
             saved.append(row)
         return saved
 
+    def data_revision(self):
+        with self.lock:
+            return ":".join(str(self.db.execute(f"SELECT COALESCE(MAX(id),0) FROM {table}").fetchone()[0])
+                            for table in ("events", "catalog_versions", "settings_versions"))
+
     def history(self, product_id=None, month=None, entity=None):
         sql, args = "SELECT * FROM events WHERE 1=1", []
         if product_id:
@@ -1297,41 +1303,6 @@ class SOPStore:
                 item["entity_key"] = json.loads(item["entity_key"])
                 records.append(item)
             return {"items": records}
-
-    @staticmethod
-    def _freeze_summary_plans(payload, groups):
-        """Freeze effective parent values from the same cutoff, retaining raw input."""
-        if not groups:
-            return
-        products = payload.get("products", [])
-        plans = {(row["product_id"], row["month"]): row for row in payload.get("plans", [])}
-        rules = {"groups": groups}
-        detail, _ = project_generation_sources({"products": [p for p in products if not p.get("summary_generation")]}, "detail", rules)
-        for parent in products:
-            name = parent.get("summary_generation")
-            if not name or name not in groups:
-                continue
-            members = [p for p in detail["products"] if generation_parent(p, rules) == name]
-            member_ids = {p["id"] for p in members}
-            parent["summary_member_product_ids"] = sorted(member_ids)
-            parent["identity_read_only"] = True
-            months = {month for pid, month in plans if pid in member_ids | {parent["id"]}}
-            for month in months:
-                key = parent["id"], month
-                row = dict(plans.get(key, {"product_id": parent["id"], "month": month, "forecast": None, "revision": 0}))
-                raw = row.get("sop")
-                automatic = plan_total(members, month, plans)
-                chosen = effective_products(members, month, plans)
-                known = sum(plans.get((p["id"], month), {}).get("sop") is not None for p in chosen)
-                present = {normalize_generation(g) for p in members for g in source_generations(p)}
-                # Manual model totals explicitly name their generation in model labels.
-                present.update(normalize_generation(p["brand"] + " " + p["model"]) for p in members if not source_generations(p))
-                missing = any(normalize_generation(g) not in present for g in groups[name])
-                row.update(input_sop=raw, auto_sop=automatic, sop=raw if raw is not None else automatic,
-                           derived=raw is None, partial=raw is None and (known < len(chosen) or missing),
-                           auto_known_members=known, auto_total_members=len(chosen))
-                plans[key] = row
-        payload["plans"] = list(plans.values())
 
     def _snapshot(self, cutoff, business_date, kind, label, auto_key=None, inclusive=False):
         cutoff_text = stamp(cutoff)
@@ -1366,7 +1337,7 @@ class SOPStore:
         rule_version = self.db.execute(f"SELECT signature,payload FROM generation_rules_versions WHERE recorded_at {operator} ? ORDER BY recorded_at DESC,id DESC LIMIT 1", (cutoff_text,)).fetchone()
         if rule_version:
             frozen_groups = json.loads(rule_version["payload"])
-            self._freeze_summary_plans(payload, frozen_groups)
+            freeze_summary_plans(payload, frozen_groups)
             payload["generation_rules"] = {"signature": rule_version["signature"], "groups": frozen_groups}
         payload["meta"] = {**payload.get("meta", {}), "snapshot_cutoff_at": cutoff_text,
                            "history_event_id": last_event_id,
@@ -1439,19 +1410,7 @@ class SOPStore:
 
     def compare(self, left, right):
         a, b = self.get_snapshot(left), self.get_snapshot(right)
-        before = {(r["product_id"], r["month"]): r for r in a["plans"]}
-        after = {(r["product_id"], r["month"]): r for r in b["plans"]}
-        items = []
-        for pid, month in sorted(before.keys() | after.keys()):
-            aa, bb = before.get((pid, month), {}), after.get((pid, month), {})
-            if all(aa.get(field) == bb.get(field) for field in ("forecast", "sop", "owner", "reason", "notes")):
-                continue
-            item = {"product_id": pid, "month": month}
-            for field in ("forecast", "sop", "owner", "reason", "notes", "revision"):
-                item[f"{field}_before"] = aa.get(field)
-                item[f"{field}_after"] = bb.get(field)
-            items.append(item)
-        return {"items": items, "left": a["snapshot"], "right": b["snapshot"]}
+        return compare_plans(a, b)
 
     @staticmethod
     def _validate_sunday(value):

@@ -1,7 +1,6 @@
 """Publish sales only after the actual source files remain stable for a minute."""
 from __future__ import annotations
 
-from contextlib import nullcontext
 from datetime import datetime, timezone
 import importlib
 import logging
@@ -21,9 +20,9 @@ SOURCE_FILES = ("鸿蒙智行锁单选配比例分析.xlsx",)
 
 
 class SalesRefresh:
-    def __init__(self, store, workbook_sync=None, *, root=None, reader=None,
+    def __init__(self, store, *, root=None, reader=None,
                  interval=300, stable_seconds=60, clock=time.monotonic):
-        self.store, self.workbook_sync = store, workbook_sync
+        self.store = store
         self.root = Path(root or PROJECT_ROOT)
         self.reader = reader or (lambda **kwargs: importlib.import_module("sop.data").refresh(**kwargs))
         self.interval, self.stable_seconds, self.clock = interval, stable_seconds, clock
@@ -51,14 +50,7 @@ class SalesRefresh:
         return tuple(result)
 
     def refresh(self):
-        # Older installations may still use file maintenance. The current
-        # frontend-only mode never reads or writes that workbook.
-        active_sync = self.workbook_sync if self.workbook_sync and not getattr(self.workbook_sync, "frontend_only", False) else None
-        with self.lock, (active_sync.lock if active_sync else nullcontext()):
-            if active_sync:
-                sync = active_sync.sync()
-                if sync["status"] in {"error", "conflict"} or not active_sync._input_checked:
-                    raise ValidationError("先处理计划表同步问题后再更新销量：" + sync["message"])
+        with self.lock:
             before = self.fingerprint()
             with self.store.lock:
                 self.store.ensure_daily_snapshots()
@@ -86,8 +78,6 @@ class SalesRefresh:
             self.observed_at = self.clock()
             self._status = {"status": "synced", "message": "原始文件自动读取已开启", "last_refresh": datetime.now(timezone.utc).isoformat()}
             result = {"ok": True, "meta": data.get("meta", {}), "product_count": len(data["products"]), "sales_count": len(data["sales"])}
-            if active_sync:
-                result["workbook_sync"] = active_sync.sync()
             return result
 
     def poll(self, *, force=False):

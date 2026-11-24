@@ -37,7 +37,7 @@
 
 **共享代际规则：** 将“SOP维护”和“订单分析”放在同级目录，保留 `../订单分析/scripts/config/shared_config.py` 的 `MERGE_GROUPS` 字典。看板每次读取此相对路径，不硬编码车型映射；规则修改后刷新即生效。页面统一按汇总代际展示，不再选择口径。汇总车型可直接填写月度总量，单代际和版本可在同一张表展开维护；同月汇总填写值优先，清空后恢复成员单代际自动相加（各单代际仍优先其车型总量）。0是明确零值，父子不重复计数。没有单代际计划也可先维护汇总总量。未参与汇总的车型保留原有独立年款。规则缺失或无效时会明确报错，不混用旧目录。该外部配置由“订单分析”项目维护，不复制进本仓库。
 
-**输入路径：** `--source-dir`（数据导入命令）或网关 `source_dir` 显式配置优先；默认读取顺序为 `SOP_SOURCE_DIR`、`SHARED_DATA_ROOT/订单汇总`、同级 `../工作台数据/shared/订单汇总`，最后仅在同级共享根不存在时兼容 `input_file/`。`SOP_SOURCE_DIR` 和 `SHARED_DATA_ROOT` 支持相对 SOP 项目根目录的路径，例如 `SHARED_DATA_ROOT=../工作台数据/shared`；也兼容绝对路径，不随启动时的当前目录改变。显式指定的共享根或已存在的共享根缺少订单文件时会报告缺失，不改读旧副本。订单汇总目录只提供只读输入；计划维护表默认位于共享根的 `SOP计划/SOP计划维护.xlsx`，数据库和规则仍由原项目维护。其他汇总报表不会加入 SOP 销量计算。
+**输入路径：** `--source-dir`（数据导入命令）或网关 `source_dir` 显式配置优先；默认读取顺序为 `SOP_SOURCE_DIR`、`SHARED_DATA_ROOT/订单汇总`、同级 `../工作台数据/shared/订单汇总`，最后仅在同级共享根不存在时兼容 `input_file/`。`SOP_SOURCE_DIR` 和 `SHARED_DATA_ROOT` 支持相对 SOP 项目根目录的路径，例如 `SHARED_DATA_ROOT=../工作台数据/shared`；也兼容绝对路径，不随启动时的当前目录改变。显式指定的共享根或已存在的共享根缺少订单文件时会报告缺失，不改读旧副本。订单汇总目录只提供只读输入；数据库和规则仍由原项目维护。其他汇总报表不会加入 SOP 销量计算。
 
 使用共享数据时，无需创建或保留本项目的空 `input_file/` 目录。该目录仅用于没有共享根的独立运行场景，届时按需创建并放入实际输入文件。
 
@@ -71,7 +71,7 @@
 | `data/` | 数据库、来源解析、设置及快照 | 否 |
 | `output_file/` | 临时导出和本地核验文件 | 否 |
 
-业务模块集中在 `sop/` 包，根目录只保留 `server.py` 作为 Python 启动入口；运行数据与临时文件通过 `.gitignore` 排除。换电脑时，应迁移 `data/` 及实际使用的共享输入和计划目录，以保留当前业务状态；只有独立模式使用了 `input_file/` 时，才需额外迁移该目录。不要仅依靠 Git 仓库保存计划或历史快照。
+业务模块集中在 `sop/` 包，根目录只保留 `server.py` 作为 Python 启动入口；运行数据与临时文件通过 `.gitignore` 排除。换机前在「数据与规则」确认实际数据库目录，停服后复制整个目录及使用中的共享输入，再启动新实例核对计划和快照。开发默认目录为同级 工作台数据/database/sop；发布版和显式配置以服务显示的位置为准。
 
 需要手动刷新销量缓存时，在项目根目录运行 `../.venv/Scripts/python.exe -m sop.data`；只读检查原始 Excel 可运行 `../.venv/Scripts/python.exe scripts/inspect_sales.py`。非 Windows 使用对应的 `../.venv/bin/python`。
 
@@ -85,6 +85,12 @@
 
 ```powershell
 ./tests/verify_excel_native.ps1 -Paths ./tests/artifacts/inline-layout/export.xlsx
+```
+
+推送时会在 Windows 用合成数据验证 Excel 导出、整数格式和回导。工具栏验收使用本机 Edge 和模拟门户，在仓库根运行以下命令。首次加 `--update-toolbar` 建立本机基准，后续使用 `--check-toolbar` 比较。基准图在 `output_file/grid-check/toolbar-baseline/`。
+
+```powershell
+node tests/grid_browser_check.cjs ../scripts/node_modules/playwright http://127.0.0.1:18877 --check-toolbar
 ```
 
 详细的业务口径、表格维护、导入导出和快照规则见[业务规则与使用说明](docs/业务规则与使用说明.md)。

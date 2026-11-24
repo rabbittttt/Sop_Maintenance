@@ -10,7 +10,6 @@ from pathlib import Path
 from unittest.mock import patch
 from server import make_handler
 from sop.store import SOPStore, TZ
-from tests.test_catalog_api import SheetSync
 
 
 class GenerationAPITest(unittest.TestCase):
@@ -29,9 +28,8 @@ class GenerationAPITest(unittest.TestCase):
         self.addCleanup(self.store.close)
         # These compatibility tests explicitly exercise the former detail setting.
         self.store.update_settings({"generation_mode": "detail"})
-        self.sync = SheetSync()
         self.http = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
-        self.http.RequestHandlerClass = make_handler(self.store, self.root, self.http.server_port, self.sync)
+        self.http.RequestHandlerClass = make_handler(self.store, self.root, self.http.server_port)
         self.thread = threading.Thread(target=lambda: self.http.serve_forever(poll_interval=0.02), daemon=True)
         self.thread.start()
         self.addCleanup(self.stop)
@@ -50,23 +48,10 @@ class GenerationAPITest(unittest.TestCase):
         conn.close()
         return result
 
-    def test_switch_syncs_before_and_after_mode_change(self):
-        with self.assertLogs("sop", level="INFO") as messages:
-            code, result = self.request("/api/settings", {"generation_mode": "summary"})
-        phases = [line for line in messages.output if "generation_switch" in line]
-        self.assertEqual(len(phases), 4)
-        for phase, message in zip(("begin", "input_checked", "mode_saved", "complete"), phases):
-            self.assertIn("phase=" + phase, message)
-        self.assertEqual(code, 200, result)
-        self.assertEqual(result["settings"]["generation_mode"], "summary")
-        self.assertEqual(self.sync.calls, 2)
-        self.assertEqual(self.request("/api/state")[1]["generation_view"]["mode"], "summary")
-
-    def test_conflict_does_not_change_mode(self):
-        self.sync.value = "conflict"
+    def test_summary_setting_is_persisted(self):
         code, result = self.request("/api/settings", {"generation_mode": "summary"})
-        self.assertEqual(code, 409, result)
-        self.assertEqual(self.store.settings().get("generation_mode", "detail"), "detail")
+        self.assertEqual(code, 200, result)
+        self.assertEqual(self.request("/api/state")[1]["generation_view"]["mode"], "summary")
 
     def test_legacy_browser_cannot_switch_the_shared_view_back_to_detail(self):
         self.store.update_settings({"generation_mode": "summary"})
@@ -74,10 +59,9 @@ class GenerationAPITest(unittest.TestCase):
         self.assertEqual(code, 409, result)
         self.assertIn("统一", result["error"])
         self.assertEqual(self.store.settings()["generation_mode"], "summary")
-        self.assertEqual(self.sync.calls, 0)
 
     def test_poll_reloads_rule_change_and_exposes_invalid_config(self):
-        path = "/api/plan-workbook/status"
+        path = "/api/status"
         first = self.request(path)[1]["generation_view"]
         self.config.write_text("MERGE_GROUPS = {'A Total': ['A One', 'A Six']}\n", encoding="utf-8")
         second = self.request(path)[1]["generation_view"]

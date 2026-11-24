@@ -46,7 +46,7 @@ class RoundtripE2ETest(unittest.TestCase):
         save("b", "2026-10", 5)
         sync = WorkbookSync(store, root / "maintenance.xlsx", writer=fixture_writer)
         self.assertEqual(sync.sync()["status"], "synced")
-        importer = PlanRoundtrip(store, sync)
+        importer = PlanRoundtrip(store)
         months = ["2026-10", "2026-12", "2027-12"]
         rows = [["车型汇总", "问界", "M5", "", "锁单数", 70, None, None, ""],
                 ["车型汇总", "问界", "M5", "", "SOP计划量", None, None, None, ""]]

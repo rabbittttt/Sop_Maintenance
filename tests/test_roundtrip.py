@@ -263,75 +263,15 @@ class RoundtripTest(unittest.TestCase):
         with self.assertRaises(Exception):
             self.store.db.execute("UPDATE plan_download_exports SET payload='{}'")
 
-    def test_primary_saved_edits_are_read_before_export_and_import(self):
-        sync = WorkbookSync(self.store, self.root / "primary.xlsx", writer=fixture_writer)
-        self.service = PlanRoundtrip(self.store, sync)
-        sync.sync()
-        context = sync._context()[0]
-        cell = next(c["cell"] for c in context["layout"]["cells"] if c["product_id"] == "a" and c["month"] == "2026-10")
-        edit_cell(sync.path, cell, 17)
-        clean, _ = self.export()
-        self.assertEqual(self.value(), 17)
-        self.change("a", "2026-10", 25)
-        edit_cell(sync.path, cell, 19)
-        self.assertEqual(self.import_file()["status"], "conflict")
-        self.assertEqual(self.value(), 19)
-
-    def test_missing_primary_workbook_after_sync_does_not_block_export_or_reimport(self):
-        sync = WorkbookSync(self.store, self.root / "primary.xlsx", writer=fixture_writer)
-        self.service = PlanRoundtrip(self.store, sync)
+    def test_export_and_import_ignore_server_side_workbook(self):
+        path = self.root / "primary.xlsx"
+        path.write_bytes(b"obsolete local edits")
         self.save("a", "2026-10", 10)
-        self.assertEqual(sync.sync()["status"], "synced")
-        sync.path.unlink()
-
-        clean, _ = self.export()
-        self.assertEqual(next(row[5] for row in clean["rows"] if row[0] == "车型汇总" and row[4] == "SOP计划量"), 10)
-        self.assertFalse(sync.path.exists())
-        self.change("a", "2026-10", 15)
-        result = self.import_file()
-        self.assertTrue(result["ok"], result)
-        self.assertEqual(self.value(), 15)
-
-    def test_missing_primary_workbook_at_start_allows_download_if_rebuild_fails(self):
-        sync = WorkbookSync(self.store, self.root / "primary.xlsx", writer=fixture_writer)
-        self.service = PlanRoundtrip(self.store, sync)
-        self.save("a", "2026-10", 10)
-        with patch.object(sync, "writer", side_effect=RuntimeError("primary writer unavailable")):
-            clean, _ = self.export()
-            self.assertEqual(next(row[5] for row in clean["rows"] if row[0] == "车型汇总" and row[4] == "SOP计划量"), 10)
-            self.assertFalse(sync.path.exists())
-            self.change("a", "2026-10", 15)
-            result = self.import_file()
-        self.assertTrue(result["ok"], result)
-        self.assertEqual(self.value(), 15)
-
-    def test_pending_primary_writeback_reports_committed_success(self):
-        sync = WorkbookSync(self.store, self.root / "primary.xlsx", writer=fixture_writer)
-        self.service = PlanRoundtrip(self.store, sync)
         self.export()
         self.change("a", "2026-10", 25)
-        with patch.object(sync, "writer", side_effect=PermissionError("Excel open")):
-            result = self.import_file()
-        self.assertTrue(result["ok"])
-        self.assertEqual(result["imported"], 1)
-        self.assertEqual(result["workbook_sync"]["status"], "pending")
-        self.assertIn("已导入", result["warning"])
+        self.assertTrue(self.import_file()["ok"])
         self.assertEqual(self.value(), 25)
-
-    def test_primary_conflict_cannot_be_bypassed_by_download_conflict_choice(self):
-        sync = WorkbookSync(self.store, self.root / "primary.xlsx", writer=fixture_writer)
-        self.service = PlanRoundtrip(self.store, sync)
-        self.export()
-        context = sync._context()[0]
-        cell = next(c["cell"] for c in context["layout"]["cells"] if c["product_id"] == "a" and c["month"] == "2026-10")
-        edit_cell(sync.path, cell, 7)
-        self.save("a", "2026-10", 8)
-        self.change("b", "2026-10", 20)
-        with self.assertRaises(ConflictError) as captured:
-            self.import_file("workbook")
-        self.assertEqual(captured.exception.source, "maintenance")
-        self.assertEqual(self.value(), 8)
-        self.assertIsNone(self.value("b"))
+        self.assertEqual(path.read_bytes(), b"obsolete local edits")
 
     def test_missing_dimensions_are_safe_and_forged_large_coordinates_rejected(self):
         self.export()

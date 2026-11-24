@@ -124,25 +124,9 @@ class SourceRefreshTest(unittest.TestCase):
             self.watcher.refresh()
         self.assertEqual(self.sales.read_bytes(), previous)
 
-    def test_workbook_import_precedes_source_publish_and_conflicts_block_it(self):
-        calls = self.calls
-        class Sheet:
-            lock = threading.RLock()
-            _input_checked = True
-            value = "synced"
-            def sync(self):
-                calls.append("sheet")
-                return {"status": self.value, "message": "conflict"}
-        sheet = Sheet()
-        self.watcher.workbook_sync = sheet
+    def test_refresh_reads_only_sales(self):
         self.watcher.refresh()
-        self.assertEqual(calls, ["sheet", "read", "sheet"])
-        previous = self.sales.read_bytes()
-        sheet.value = "conflict"
-        with self.assertRaises(ValidationError):
-            self.watcher.refresh()
-        self.assertEqual(calls[-1], "sheet")
-        self.assertEqual(self.sales.read_bytes(), previous)
+        self.assertEqual(self.calls, ["read"])
 
     def test_failed_first_publish_leaves_no_sales_file(self):
         self.sales.unlink()

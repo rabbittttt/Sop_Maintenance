@@ -161,7 +161,7 @@ class OfflineExportTest(unittest.TestCase):
     def test_first_web_template_creates_maintenance_only_after_successful_import(self):
         maintenance = self.root / "input_file" / "SOP计划维护.xlsx"
         sync = WorkbookSync(self.store, maintenance, auto_create=False)
-        self.service = PlanRoundtrip(self.store, sync)
+        self.service = PlanRoundtrip(self.store)
         self.assertEqual(sync.sync()["status"], "absent")
         self.assertFalse(maintenance.exists())
         self.save("a", "2026-10", 10)
@@ -172,8 +172,8 @@ class OfflineExportTest(unittest.TestCase):
         result = self.service.import_content(self.path.read_bytes())
         self.assertTrue(result["ok"], result)
         self.assertEqual(result["imported"], 1)
-        self.assertEqual(result["workbook_sync"]["status"], "synced", result)
-        self.assertTrue(maintenance.is_file())
+        self.assertNotIn("workbook_sync", result)
+        self.assertFalse(maintenance.is_file())
         self.assertEqual(self.store.db.execute(
             "SELECT sop FROM plans WHERE product_id='a' AND month='2026-10'").fetchone()[0], 41)
 

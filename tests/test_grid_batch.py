@@ -238,7 +238,7 @@ class GridBatchTest(unittest.TestCase):
         sync = WorkbookSync(self.store, maintenance, writer=writer, root=self.root, auto_create=False)
         self.assertEqual(sync.sync()["status"], "absent")
         http_server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
-        http_server.RequestHandlerClass = make_handler(self.store, self.root, http_server.server_port, sync)
+        http_server.RequestHandlerClass = make_handler(self.store, self.root, http_server.server_port)
         thread = threading.Thread(target=lambda: http_server.serve_forever(poll_interval=0.02), daemon=True)
         thread.start()
         connection = http.client.HTTPConnection("127.0.0.1", http_server.server_port)
@@ -248,7 +248,7 @@ class GridBatchTest(unittest.TestCase):
             response = connection.getresponse()
             result = json.loads(response.read())
             self.assertEqual(response.status, 200, result)
-            self.assertEqual(result["workbook_sync"]["status"], "absent")
+            self.assertNotIn("workbook_sync", result)
             self.assertEqual(self.plan()["sop"], 25)
             self.assertEqual(self.plan(result["entry_ids"]["new"], "2027-01")["sop"], 12)
             self.assertFalse(self.product("b")["active"])
@@ -262,9 +262,8 @@ class GridBatchTest(unittest.TestCase):
             http_server.server_close()
 
     def test_http_sync_precedes_revision_check_and_absent_file_is_not_created(self):
-        sync = SheetSync(status="absent")
         http_server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
-        http_server.RequestHandlerClass = make_handler(self.store, self.root, http_server.server_port, sync)
+        http_server.RequestHandlerClass = make_handler(self.store, self.root, http_server.server_port)
         thread = threading.Thread(target=lambda: http_server.serve_forever(poll_interval=0.02), daemon=True)
         thread.start()
         def request(body):
@@ -276,26 +275,17 @@ class GridBatchTest(unittest.TestCase):
             first = self.body(entries=[self.entry()])
             code, result = request(first)
             self.assertEqual(code, 200, result)
-            self.assertEqual((sync.calls, result["workbook_sync"]["status"]), (2, "absent"))
             self.assertFalse((self.root / "input_file" / "SOP计划维护.xlsx").exists())
-            sync.value = "pending"
             code, retried = request(first)
             self.assertEqual(code, 200)
             self.assertEqual(retried["entry_ids"], result["entry_ids"])
             current = self.body(changes=[self.edit()], entries=[self.entry("another", "Other 2027款")])
-            original_sync = sync.sync
-            def synchronize_edit():
-                self.store.save_plans({"owner": "Excel", "changes": [{"product_id": "a", "month": "2026-10",
-                                          "sop": 33, "forecast": 110, "revision": self.plan()["revision"]}]})
-                return original_sync()
-            with patch.object(sync, "sync", side_effect=synchronize_edit):
-                code, result = request(current)
+            self.store.save_plans({"owner":"peer", "changes":[{
+                "product_id":"a","month":"2026-10","sop":33,"forecast":110,"revision":self.plan()["revision"]}]})
+            code, result = request(current)
             self.assertEqual(code, 409, result)
             self.assertEqual(self.plan()["sop"], 33)
             self.assertEqual(self.store.db.execute("SELECT COUNT(*) FROM grid_batch_requests").fetchone()[0], 1)
-            sync.value = "conflict"
-            code, _ = request(self.body(entries=[self.entry("blocked", "Blocked")]))
-            self.assertEqual(code, 409)
         finally:
             http_server.shutdown(); thread.join(); http_server.server_close()
 

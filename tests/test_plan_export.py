@@ -198,7 +198,7 @@ class ExportHTTPTest(unittest.TestCase):
         self.http = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
         self.roundtrip = BoundExportStub()
         self.http.RequestHandlerClass = make_handler(NoBusinessAccess(), self.root, self.http.server_port,
-                                                    workbook_sync=NoBusinessAccess(), plan_export=self.service,
+                                                    plan_export=self.service,
                                                     plan_roundtrip=self.roundtrip)
         self.thread = threading.Thread(target=lambda: self.http.serve_forever(poll_interval=0.02), daemon=True)
         self.thread.start()

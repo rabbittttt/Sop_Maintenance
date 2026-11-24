@@ -103,7 +103,7 @@ class MultiuserImportTest(unittest.TestCase):
     def test_frontend_only_ignores_server_file_and_does_not_create_one(self):
         path = self.f.root / 'not-required' / 'maintenance.xlsx'
         sync = WorkbookSync(self.f.store, path, frontend_only=True)
-        self.f.service = PlanRoundtrip(self.f.store, sync)
+        self.f.service = PlanRoundtrip(self.f.store)
         self.assertEqual(sync.sync()['status'], 'frontend')
         self.assertFalse(path.exists())
         first = self.submit()
@@ -124,10 +124,10 @@ class MultiuserImportTest(unittest.TestCase):
         path = self.f.root / 'maintenance.xlsx'
         sync = WorkbookSync(self.f.store, path, frontend_only=True)
         sync.sync()
-        service = PlanRoundtrip(self.f.store, sync)
+        service = PlanRoundtrip(self.f.store)
         server = ThreadingHTTPServer(('127.0.0.1', 0), BaseHTTPRequestHandler)
         server.RequestHandlerClass = make_handler(self.f.store, self.f.root, server.server_port,
-            workbook_sync=sync, plan_roundtrip=service,
+            plan_roundtrip=service,
             source_refresh=SimpleNamespace(status=lambda: {}), console_user='DOMAIN\\alice')
         thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=.02), daemon=True)
         thread.start()
@@ -158,14 +158,14 @@ class MultiuserImportTest(unittest.TestCase):
             self.assertFalse(path.exists())
             code, state = request('/api/state')
             self.assertEqual(code, 200)
-            before = state['workbook_sync']['data_revision']
+            before = state['data_revision']
             self.f.save('a', '2026-10', 55)
-            code, status = request('/api/plan-workbook/status')
+            code, status = request('/api/status')
             self.assertEqual(code, 200)
             self.assertNotEqual(before, status['data_revision'])
             for endpoint in ('sync', 'open', 'export'):
-                self.assertEqual(request('/api/plan-workbook/' + endpoint, {})[0], 400)
-            self.assertEqual(request('/api/plan-workbook/download')[0], 400)
+                self.assertEqual(request('/api/plan-workbook/' + endpoint, {})[0], 404)
+            self.assertEqual(request('/api/plan-workbook/download')[0], 404)
             self.assertFalse(path.exists())
         finally:
             server.shutdown()

@@ -240,7 +240,7 @@ class InlineRoundtripTest(unittest.TestCase):
     @unittest.skipUnless((Path.home() / ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe").is_file(), "Bundled spreadsheet runtime unavailable")
     def test_real_export_without_primary_workbook_can_be_imported(self):
         sync = WorkbookSync(self.store, self.root / "primary.xlsx", writer=fixture_writer)
-        self.service = PlanRoundtrip(self.store, sync)
+        self.service = PlanRoundtrip(self.store)
         self.assertEqual(sync.sync()["status"], "synced")
         sync.path.unlink()
 

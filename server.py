@@ -24,7 +24,6 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from sop.paths import plan_workbook_path, runtime_data_directory, service_log_directory, source_directory
 from sop.store import ConflictError, SOPStore, ValidationError
-from sop.workbook import WorkbookSync
 from sop.backup import SnapshotBackup
 from sop.export import ExportError, MAX_REQUEST_BYTES, PlanExport
 from sop.refresh import SalesRefresh
@@ -88,8 +87,8 @@ def open_workbench(url):
     print(f"未能自动打开浏览器，请手动访问：{url}", flush=True)
 
 
-def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None, plan_export=None,
-                 source_refresh=None, plan_roundtrip=None, gateway=None, *, console_user=None):
+def make_handler(store, web_root, port, *, snapshot_backup=None, plan_export=None,
+                 source_refresh=None, plan_roundtrip=None, gateway=None, console_user=None):
     plan_export = plan_export or PlanExport(root=ROOT)
     frame_origin = os.environ.get("SOP_PARENT_ORIGIN", "")
     if frame_origin:
@@ -110,9 +109,9 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
         with roundtrip_lock:
             if plan_roundtrip is None:
                 from sop.roundtrip import PlanRoundtrip
-                plan_roundtrip = PlanRoundtrip(store, workbook_sync)
+                plan_roundtrip = PlanRoundtrip(store)
             return plan_roundtrip
-    source_refresh = source_refresh or SalesRefresh(store, workbook_sync, root=ROOT,
+    source_refresh = source_refresh or SalesRefresh(store, root=ROOT,
         reader=lambda **kwargs: importlib.import_module("sop.data").refresh(**kwargs))
     allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}
     if port == 80:
@@ -350,8 +349,8 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                     # between these reads must not make stale rows look current.
                     with store.lock:
                         state = store.state()
-                        if workbook_sync:
-                            state["workbook_sync"] = workbook_sync.status()
+                        state["data_revision"] = store.data_revision()
+                        state["database_directory"] = str(store.db_path.parent)
                     state["source_refresh"] = source_refresh.status()
                     self._json(state)
                 elif path == "/api/option-mix":
@@ -365,36 +364,14 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                     self._reconcile_get(path)
                 elif path == "/api/products":
                     self._json(store.list_products())
-                elif path == "/api/plan-workbook/status" and workbook_sync:
+                elif path == "/api/status":
                     from sop import demand
                     try:
                         generation_view = store.generation_view()
                     except (ValidationError, MergeRuleError) as error:
                         generation_view = {"error": str(error)}
-                    self._json({**workbook_sync.status(), "source_refresh": source_refresh.status(),
+                    self._json({"data_revision": store.data_revision(), "source_refresh": source_refresh.status(),
                                 "generation_view": generation_view, "demand_revision": demand.revision(store)})
-                elif path == "/api/plan-workbook/download" and workbook_sync:
-                    if workbook_sync.frontend_only:
-                        raise ValidationError("请使用页面上的导出按钮下载计划表。")
-                    # Public GET must not import workbook edits into business data.
-                    if gateway and not workbook_sync.path.is_file():
-                        self._json({"error": "维护表尚未生成，请联系维护人员。"}, 404)
-                        return
-                    result = ({"status": "ready"} if gateway else
-                              workbook_sync.sync(force_export=not workbook_sync.path.is_file()))
-                    if result["status"] in {"conflict", "error", "pending"}:
-                        self._json({"error": result["message"], "workbook_sync": result}, 409)
-                        return
-                    encoded = workbook_sync.path.read_bytes()
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                    self.send_header("Content-Disposition", "attachment; filename=SOP-plan-copy.xlsx")
-                    self.send_header("Content-Length", str(len(encoded)))
-                    self.send_header("Cache-Control", "no-store")
-                    self.send_header("X-Content-Type-Options", "nosniff")
-                    self.end_headers()
-                    if self.command != "HEAD":
-                        self.wfile.write(encoded)
                 elif path == "/api/history":
                     self._json(store.history(query.get("product_id"), query.get("month"), query.get("entity")))
                 elif path == "/api/backups/status" and snapshot_backup:
@@ -566,45 +543,11 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                         self._json(result, 409 if result.get("status") == "conflict" else 400)
                         return
                 elif path == "/api/plans":
-                    result = workbook_sync.save_web_plans(body) if workbook_sync else store.save_plans(body)
+                    result = store.save_plans(body)
                 elif path == "/api/plans/batch-edit":
-                    if workbook_sync:
-                        with workbook_sync.lock:
-                            status = workbook_sync.sync()
-                            if status["status"] in {"error", "conflict"} or not workbook_sync._input_checked:
-                                self._json({"error": status["message"], "workbook_sync": status}, 409)
-                                return
-                            result = store.save_grid_batch(body)
-                            result["workbook_sync"] = workbook_sync.sync()
-                    else:
-                        result = store.save_grid_batch(body)
+                    result = store.save_grid_batch(body)
                 elif path == "/api/products":
-                    # Preserve saved Excel edits before changing its row directory.
-                    if workbook_sync:
-                        with workbook_sync.lock:
-                            status = workbook_sync.sync()
-                            if status["status"] in {"error", "conflict"} or not workbook_sync._input_checked:
-                                self._json({"error": status["message"], "workbook_sync": status}, 409)
-                                return
-                            result = store.save_products(body)
-                            result["workbook_sync"] = workbook_sync.sync()
-                    else:
-                        result = store.save_products(body)
-                elif path in {"/api/plan-workbook/sync", "/api/plan-workbook/export"} and workbook_sync:
-                    if workbook_sync.frontend_only:
-                        raise ValidationError("请通过页面导入或导出计划表。")
-                    status = workbook_sync.sync(force_export=path.endswith("/export"), choice=body.get("choice"))
-                    result = {"ok": status["status"] not in {"conflict", "error"}, **status}
-                elif path == "/api/plan-workbook/open" and workbook_sync:
-                    if workbook_sync.frontend_only:
-                        raise ValidationError("请通过页面导入或导出计划表。")
-                    status = workbook_sync.sync(force_export=not workbook_sync.path.is_file())
-                    if not workbook_sync.path.is_file():
-                        raise ValidationError(status["message"])
-                    if os.name != "nt":
-                        raise ValidationError("请手动打开计划表：" + str(workbook_sync.path))
-                    os.startfile(workbook_sync.path)
-                    result = {"ok": True, "path": str(workbook_sync.path), "workbook_sync": status}
+                    result = store.save_products(body)
                 elif path == "/api/shipments":
                     result = store.save_shipments(body)
                 elif path == "/api/settings":
@@ -613,37 +556,8 @@ def make_handler(store, web_root, port, workbook_sync=None, snapshot_backup=None
                         # back to the retired flat presentation.
                         self._json({"error": "车型已统一按汇总代际展示，请刷新页面并使用车型行的展开功能。"}, 409)
                         return
-                    if "generation_mode" in body and workbook_sync:
-                        started = time.monotonic()
-                        target_mode = body["generation_mode"] if body["generation_mode"] in ("detail", "summary") else "invalid"
-                        LOGGER.info("generation_switch target=%r phase=begin", target_mode)
-                        # Accept saved edits using the old view before replacing
-                        # its rows. A conflict must leave the selected mode intact.
-                        with workbook_sync.lock:
-                            before = workbook_sync.sync()
-                            LOGGER.info("generation_switch target=%r phase=input_checked status=%s elapsed_ms=%d",
-                                        target_mode, before["status"], (time.monotonic() - started) * 1000)
-                            if before["status"] in {"error", "conflict"} or not workbook_sync._input_checked:
-                                self._json({"error": before["message"], "workbook_sync": before}, 409)
-                                return
-                            result = store.update_settings(body)
-                            LOGGER.info("generation_switch target=%r phase=mode_saved elapsed_ms=%d",
-                                        target_mode, (time.monotonic() - started) * 1000)
-                            result["workbook_sync"] = workbook_sync.sync()
-                            LOGGER.info("generation_switch target=%r phase=complete status=%s elapsed_ms=%d",
-                                        target_mode, result["workbook_sync"]["status"], (time.monotonic() - started) * 1000)
-                    else:
-                        result = store.update_settings(body)
-                        if workbook_sync:
-                            result["workbook_sync"] = workbook_sync.sync()
+                    result = store.update_settings(body)
                 elif path == "/api/snapshots":
-                    if workbook_sync:
-                        sync_state = workbook_sync.sync()
-                        if sync_state["status"] in {"conflict", "error"} or not getattr(workbook_sync, "_input_checked", True):
-                            self._json({"error": sync_state["message"], "workbook_sync": sync_state,
-                                        "conflicts": sync_state.get("conflicts", [])},
-                                       409 if sync_state["status"] == "conflict" else 400)
-                            return
                     result = store.manual_snapshot(body.get("label", ""))
                     if snapshot_backup:
                         result["excel_backup"] = snapshot_backup.ensure(result["snapshot"]["id"])
@@ -725,8 +639,7 @@ def main():
                             handlers=[logging.StreamHandler(), file_handler], force=True)
         store = SOPStore(args.data_dir / "sop.sqlite3", args.data_dir / "sales.json")
         store.ensure_daily_snapshots()
-        workbook_sync = WorkbookSync(store, args.plan_file, auto_create=False, frontend_only=True)
-        source_refresh = SalesRefresh(store, workbook_sync, root=ROOT)
+        source_refresh = SalesRefresh(store, root=ROOT)
         source_refresh.poll()  # Start the first one-minute stability window immediately.
         snapshot_backup = SnapshotBackup(store)
 
@@ -752,8 +665,8 @@ def main():
             worker.start()
             workers.append(worker)
         server.launch_mode = "gateway" if gateway else "console"
-        server.RequestHandlerClass = make_handler(store, args.web_dir, args.port, workbook_sync,
-                                                  snapshot_backup, source_refresh=source_refresh, gateway=gateway)
+        server.RequestHandlerClass = make_handler(store, args.web_dir, args.port,
+                                                  snapshot_backup=snapshot_backup, source_refresh=source_refresh, gateway=gateway)
         print(f"\nSOP管理已就绪：{url}\n保持此窗口打开；关闭窗口或按 Ctrl+C 即停止。\n关闭浏览器页面不会停止工作台。\n", flush=True)
         if args.open_browser:
             threading.Thread(target=open_workbench, args=(url,), name="open-browser", daemon=True).start()

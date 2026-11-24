@@ -20,7 +20,7 @@ const context=vm.createContext({localStorage:{getItem:()=>null},
   document:{hidden:false,querySelector:s=>nodes.get(s)||null,querySelectorAll:s=>s==='.table-scroll'?[scroll]:[]},
   requestAPI:async(path,body)=>{requests.push({path,body});
     if(path==='/api/settings')return post(body);
-    if(path==='/api/plan-workbook/status')return status;
+    if(path==='/api/status')return status;
     if(path==='/api/state'){reads++;if(readFailures.length)throw readFailures.shift();return structuredClone(serverState);}
     throw new Error(path);},
   notify:(text,error)=>toasts.push({text,error}),
@@ -83,17 +83,17 @@ assert.match(toasts.at(-1).text,/同步冲突/);assert.equal(app.inert,false);
 status={status:'absent',generation_view:{...serverState.generation_view,rule_signature:'second'}};
 serverState.generation_view=status.generation_view;
 const before=reads;
-await run('pollWorkbookStatus()');
+await run('pollDataStatus()');
 assert.equal(reads,before+1);assert.equal(run('state.generation_view.rule_signature'),'second');
 assert.equal(scroll.scrollLeft,91);assert.equal(scroll.scrollTop,12);
-await run('pollWorkbookStatus()');assert.equal(reads,before+1,'Unchanged rule/status does not repeatedly reload.');
+await run('pollDataStatus()');assert.equal(reads,before+1,'Unchanged rule/status does not repeatedly reload.');
 status={status:'error',generation_view:{mode:'summary',rule_signature:'',error:'汇总规则文件不存在'}};
-await run('pollWorkbookStatus()');
+await run('pollDataStatus()');
 assert.match(app.innerHTML,/代际范围暂不可用/);assert.match(app.innerHTML,/汇总规则文件不存在/);
 assert.throws(()=>run("buildPlanExport({selectedMonths:['2026-10']})"),/规则文件不存在/);
 status={status:'absent',generation_view:{mode:'summary',rule_signature:'third'}};
 serverState.generation_view=status.generation_view;
-await run('pollWorkbookStatus()');
+await run('pollDataStatus()');
 assert.doesNotMatch(app.innerHTML,/代际范围暂不可用/);
 assert.equal(run('generationViewError'),'');
 
@@ -139,7 +139,7 @@ assert.doesNotMatch(app.innerHTML,/请修正规则/);
 
 // Once polling reconnects, the authoritative committed mode replaces the old scope.
 status={status:'absent',generation_view:serverState.generation_view};
-await run('pollWorkbookStatus()');
+await run('pollDataStatus()');
 assert.equal(run('generationMode()'),'summary');
 assert.equal(run('generationViewError'),'');
 assert.doesNotMatch(app.innerHTML,/业务服务连接中断|代际范围暂不可用/);
@@ -155,7 +155,7 @@ assert.equal(reads,readsBeforeRuleFailure+1,'Do not retry a confirmed rule/confi
 assert.match(app.innerHTML,/代际范围暂不可用/);assert.match(app.innerHTML,/恢复读取发现新的汇总规则配置错误/);
 assert.match(app.innerHTML,/请修正规则/);assert.doesNotMatch(app.innerHTML,/旧的写入网络错误|业务服务连接中断/);
 status={status:'absent',generation_view:serverState.generation_view};
-await run('pollWorkbookStatus()');
+await run('pollDataStatus()');
 assert.equal(run('generationViewError'),'');
 
 // An unfinished inline maintenance draft must survive a rejected selector change.

@@ -36,11 +36,10 @@ class CatalogAPITest(unittest.TestCase):
         sales = self.root / "sales.json"
         sales.write_text(json.dumps({"meta": {}, "products": [], "sales": []}), encoding="utf-8")
         self.store = SOPStore(self.root / "test.sqlite3", sales, lambda: datetime(2026, 10, 23, 12, tzinfo=TZ))
-        self.sync = SheetSync()
         self.http = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
         self.now = 0
-        self.refresh = SalesRefresh(self.store, self.sync, root=self.root, clock=lambda: self.now)
-        self.http.RequestHandlerClass = make_handler(self.store, self.root, self.http.server_port, self.sync, source_refresh=self.refresh)
+        self.refresh = SalesRefresh(self.store, root=self.root, clock=lambda: self.now)
+        self.http.RequestHandlerClass = make_handler(self.store, self.root, self.http.server_port, source_refresh=self.refresh)
         self.thread = threading.Thread(target=lambda: self.http.serve_forever(poll_interval=0.02), daemon=True)
         self.thread.start()
 
@@ -66,7 +65,7 @@ class CatalogAPITest(unittest.TestCase):
     def test_create_and_rename_keep_stable_id_and_plan(self):
         code, created = self.request("POST", self.change())
         self.assertEqual(code, 200)
-        self.assertEqual(self.sync.calls, 2)
+        self.assertNotIn("workbook_sync", created)
         product = created["items"][0]
         self.store.save_plans({"owner": "test", "changes": [{"product_id": product["id"], "month": "2027-12", "sop": 0, "forecast": None, "revision": 0}]})
         code, changed = self.request("POST", {"owner": "test", "changes": [{"id": product["id"], "revision": product["revision"], "model": "Renamed"}]})
@@ -74,20 +73,6 @@ class CatalogAPITest(unittest.TestCase):
         self.assertEqual(changed["items"][0]["id"], product["id"])
         self.assertEqual(self.request()[1]["items"][0]["model"], "Renamed")
         self.assertEqual(self.store.state()["plans"][0]["sop"], 0)
-
-    def test_unread_sheet_and_conflict_block_catalog_changes(self):
-        for status, checked in [("error", True), ("conflict", True), ("pending", False)]:
-            self.sync.value, self.sync._input_checked = status, checked
-            code, result = self.request("POST", self.change())
-            self.assertEqual(code, 409, result)
-            self.assertEqual(self.store.list_products()["items"], [])
-
-    def test_locked_export_does_not_reject_saved_catalog(self):
-        self.sync.value = "pending"
-        code, result = self.request("POST", self.change())
-        self.assertEqual(code, 200)
-        self.assertEqual(result["workbook_sync"]["status"], "pending")
-        self.assertEqual(len(self.store.list_products()["items"]), 1)
 
     def test_revision_conflict_is_exposed(self):
         _, created = self.request("POST", self.change())

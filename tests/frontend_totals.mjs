@@ -132,7 +132,6 @@ const app={innerHTML:''};
 context.document={querySelector:s=>s==='#app'?app:null};
 vm.runInContext(`
   state.products.forEach(p=>p.brand='问界');state.meta={};
-  state.workbook_sync={status:'pending',message:'等待Excel关闭后回写'};
   state.months=Array.from({length:22},(_,i)=>shift('2026-03',i));
   state.plan_end='2027-12';target='2026-10';planning();
 `,context);
@@ -178,7 +177,6 @@ assert.equal(headers.length,15);
 assert.doesNotMatch(rendered,/<h1>|annual-heading/);
 assert.match(rendered,/value="2028" selected>2028年/);
 assert.match(rendered,/2028总计/);
-assert.match(rendered,/Excel待同步/);
 assert.doesNotMatch(rendered,/class="stats"|历史锁单参考|品牌维护进度/);
 assert.equal(get('target'),'2028-01');
 vm.runInContext("selectPlanYear('2026');planning()",context);
@@ -195,10 +193,6 @@ assert.deepEqual(calendarExport.headers.filter(h=>/^\d{4}-\d{2}$/.test(h)),get('
 assert.deepEqual(exportRequests[1].body.months,get('yearMonths()'));
 assert.deepEqual(exportRequests[1].body.annual_plans,calendarExport.annualPlans);
 assert.match(exportDownloads[1],/2026-01_2026-12_12个月_版本明细\.xlsx$/);
-vm.runInContext("state.workbook_sync={status:'synced'}",context);
-assert.match(get('workbookStrip()'),/Excel已同步/);
-vm.runInContext("state.workbook_sync={status:'conflict'}",context);
-assert.match(get('workbookStrip()'),/查看问题/);
 // Calendar-year SOP totals include months outside the rolling window, but no next-year values.
 vm.runInContext(`
   state={current_month:'2026-10',plan_end:'2027-12',meta:{},sales:[],plans:[],model_sales:[],
