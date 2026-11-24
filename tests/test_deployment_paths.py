@@ -8,7 +8,7 @@ from unittest.mock import patch
 from sop import data as sop_data
 from sop import source_rules as sop_source_rules
 import server
-from sop.paths import source_directory, runtime_data_directory, service_log_directory, plan_workbook_path
+from sop.paths import source_directory, runtime_data_directory, service_log_directory
 from sop.refresh import SalesRefresh
 from sop.source_rules import load_merge_rules
 
@@ -31,12 +31,10 @@ class DeploymentPathsTest(unittest.TestCase):
                     self.assertEqual(service_log_directory(root), parent / 'custom/sop')
                 with patch.dict(os.environ, {'SHARED_DATA_ROOT': '../工作台数据/shared'}):
                     self.assertEqual(source_directory(root), parent / '工作台数据' / 'shared' / '订单汇总')
-                    self.assertEqual(plan_workbook_path(root), parent / '工作台数据' / 'shared' / 'SOP计划' / 'SOP计划维护.xlsx')
                 with patch.dict(os.environ, {'SOP_SOURCE_DIR': '../sales', 'SOP_PLAN_DIR': '../plans',
                                             'SOP_DATA_DIR': './state', 'SOP_SHARED_CONFIG': '../rules.py'}), \
                      patch.object(sop_source_rules, 'PROJECT_ROOT', root):
                     self.assertEqual(source_directory(root), parent / 'sales')
-                    self.assertEqual(plan_workbook_path(root), parent / 'plans' / 'SOP计划维护.xlsx')
                     self.assertEqual(runtime_data_directory(root), root / 'state')
                     self.assertEqual(load_merge_rules()['config_path'], str(rules))
             finally:
@@ -86,21 +84,15 @@ class DeploymentPathsTest(unittest.TestCase):
             root = Path(folder).resolve() / 'SOP看板'
             shared = Path(folder).resolve() / '工作台数据' / 'shared'
             self.assertEqual(source_directory(root), root / 'input_file')
-            self.assertEqual(plan_workbook_path(root), root / 'input_file' / 'SOP计划维护.xlsx')
             shared.mkdir(parents=True)
             # A missing category must not silently select stale project inputs.
             self.assertEqual(source_directory(root), shared / '订单汇总')
-            self.assertEqual(plan_workbook_path(root), shared / 'SOP计划' / 'SOP计划维护.xlsx')
             self.assertEqual(runtime_data_directory(root), root.parent / '工作台数据' / 'database' / 'sop')
             configured = Path(folder) / 'configured-shared'
             with patch.dict(os.environ, {'SHARED_DATA_ROOT': str(configured)}):
                 self.assertEqual(source_directory(root), configured / '订单汇总')
-                self.assertEqual(plan_workbook_path(root), configured / 'SOP计划' / 'SOP计划维护.xlsx')
                 with patch.dict(os.environ, {'SOP_SOURCE_DIR': str(root / 'explicit-sales')}):
                     self.assertEqual(source_directory(root), root / 'explicit-sales')
-                    self.assertEqual(plan_workbook_path(root), configured / 'SOP计划' / 'SOP计划维护.xlsx')
-                with patch.dict(os.environ, {'SOP_PLAN_DIR': str(root / 'explicit-plans')}):
-                    self.assertEqual(plan_workbook_path(root), root / 'explicit-plans' / 'SOP计划维护.xlsx')
 
     def test_sources_settings_and_watcher_share_external_paths(self):
         with tempfile.TemporaryDirectory() as folder:

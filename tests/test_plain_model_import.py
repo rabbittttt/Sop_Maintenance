@@ -155,22 +155,14 @@ class PlainModelImportTest(unittest.TestCase):
         self.assertIsNone(self.f.value(parent))
 
     def test_real_maintenance_template_can_fill_only_the_model_input_or_model_row(self):
-        from sop.workbook import WorkbookSync
-        from sop.xlsx_plan import write_plan_workbook
+        from tests.legacy_model_sheet import historical_model_sheet
         parent = self.f.model_id('Together 2026款')
-        sync = WorkbookSync(self.f.store, self.f.root / 'maintenance.xlsx', auto_create=False)
         for kind in ('product', 'model_total'):
             with self.subTest(row_kind=kind):
                 self.f.save(parent, None)
-                context, _ = sync._context()
-                spec = context['layout']['sheets'][0]
-                if kind == 'product':
-                    row = next(r['row'] for r in spec['rows'] if r['kind'] == kind and r.get('product_id') == parent)
-                else:
-                    row = next(r['row'] for r in spec['rows'] if r['kind'] == kind and r.get('label_b') == 'Together 2026款 合计')
-                column = next(c['column'] for c in spec['columns'] if c.get('month') == '2026-10')
-                write_plan_workbook({**context, 'token': 'unmarked-test', 'generated_at': '2026-10-29T12:00:00+08:00', 'output_path': str(self.path)})
-                book = openpyxl.load_workbook(self.path)
+                book = historical_model_sheet('Together 2026款', include_model=True)
+                row = 7 if kind == 'product' else 8
+                column = 13
                 self.assertNotIn('_sop_import', book.sheetnames)
                 self.assertEqual(book['SOP计划']['C3'].value, '版本')
                 book['SOP计划'].cell(row, column, 234)

@@ -11,11 +11,9 @@ import openpyxl
 
 from sop.roundtrip import PlanRoundtrip
 from sop.store import SOPStore, TZ, ValidationError
-from sop.workbook import WorkbookSync
 from sop.xlsx_export import write_export_workbook
-from sop.xlsx_plan import write_plan_workbook
 from tests import test_inline_renderer as fixtures
-from tests.test_workbook_sync import edit_cell
+from tests.xlsx_edits import edit_cell
 
 
 PRODUCTS = [
@@ -138,26 +136,6 @@ class SummaryCatalogTest(unittest.TestCase):
         self.assertEqual(len([p for p in self.store.read_sales(include_excluded=True)["products"] if not p.get("summary_generation")]), 4)
         self.assertTrue(self.store.manual_snapshot("mixed-source-check")["ok"])
 
-    def test_old_maintenance_imports_saved_edits_then_removes_summary_rows(self):
-        path = self.root / "maintenance.xlsx"
-        with previous_view():
-            previous = WorkbookSync(self.store, path, writer=write_plan_workbook)
-            self.assertEqual(previous.sync()["status"], "synced")
-            token, context, *_ = previous._parse(path.read_bytes())
-            cells = {item["product_id"]: item["cell"] for item in context["layout"]["cells"]
-                     if item["month"] == "2026-10"}
-        edit_cell(path, cells["a"], 11)
-        edit_cell(path, cells["summary"], 31)
-        current = WorkbookSync(self.store, path, writer=write_plan_workbook)
-        result = current.sync()
-        self.assertEqual(result["status"], "synced", result)
-        new_token, context, *_ = current._parse(path.read_bytes())
-        self.assertNotEqual(new_token, token)
-        self.assertNotIn("summary", {p["id"] for p in context["products"]})
-        self.assertEqual(self.quantity("a"), 11)
-        self.assertEqual(self.quantity("summary"), 31)
-        self.assertEqual(current.sync()["status"], "synced")
-        self.assertEqual(self.store.db.execute("SELECT active FROM product_catalog WHERE id='summary'").fetchone()[0], 1)
 
     def old_download(self):
         with patch.multiple(fixtures, PRODUCTS=PRODUCTS, PLANS=PLANS, LOOKUP=LOOKUP):

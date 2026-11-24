@@ -1,7 +1,6 @@
 """Disposable download validation and HTTP behavior, without a business database."""
 import http.client
 import json
-import os
 import subprocess
 import tempfile
 import threading
@@ -29,7 +28,7 @@ def payload():
 
 
 def fixture_writer(body):
-    """Minimal OOXML fixture for response plumbing; production uses artifact-tool."""
+    """Minimal OOXML fixture for the download response."""
     with zipfile.ZipFile(body["output_path"], "w") as archive:
         archive.writestr("[Content_Types].xml", '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>')
         archive.writestr("xl/workbook.xml", '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheets><sheet name="SOP计划导出" sheetId="1"/></sheets></workbook>')
@@ -154,18 +153,15 @@ class ExportGenerationTest(unittest.TestCase):
         finally:
             service.slots.release(); service.slots.release()
 
-    def test_node_uses_stdin_timeout_hidden_window_and_validates_result(self):
-        service = PlanExport(root=self.root, timeout=91)
+    def test_python_worker_inherits_service_interpreter_and_timeout(self):
+        import sys
+        from sop.excel_worker import render
         body = {**payload(), "output_path": str(self.root / "export.xlsx")}
-        result = subprocess.CompletedProcess([], 0, json.dumps({"ok": True, "output_path": body["output_path"]}), "")
-        with patch("sop.export.Path.is_file", return_value=True), patch("sop.export.subprocess.run", return_value=result) as run:
-            service._node_writer(body)
-            kwargs = run.call_args.kwargs
-            self.assertEqual(kwargs["timeout"], 91)
-            self.assertEqual(json.loads(kwargs["input"]), body)
-            self.assertEqual(kwargs["creationflags"], subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
-            result.stdout = "not-json"
-            with self.assertRaises(ExportError): service._node_writer(body)
+        with patch("sop.excel_worker.subprocess.run", return_value=subprocess.CompletedProcess([], 0, b"", b"")) as run:
+            render("plan", body, timeout=91)
+        self.assertEqual(run.call_args.args[0], [sys.executable, str(Path(__file__).resolve().parents[1] / "sop/excel_worker.py"), "plan"])
+        self.assertEqual(json.loads(run.call_args.kwargs["input"]), body)
+        self.assertEqual(run.call_args.kwargs["timeout"], 91)
 
 
 class NoBusinessAccess:

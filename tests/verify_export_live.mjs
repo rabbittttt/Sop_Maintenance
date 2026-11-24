@@ -8,8 +8,13 @@ if (!base) throw new Error('请通过 SOP_TEST_BASE_URL 指定隔离测试服务
 const response = await fetch(base+'/api/state');
 assert.equal(response.status,200);
 const data=await response.json();
-const source=await fs.readFile(new URL('web/app.js',root),'utf8');
-assert.equal(await (await fetch(base+'/app.js')).text(),source);
+import {dashboardSource as source} from './dashboard_source.mjs';
+const html=await (await fetch(base+'/')).text();
+const deployed=[];
+for(const [,asset] of html.matchAll(/<script src="([^"]+)" defer><\/script>/g)){
+  deployed.push(await (await fetch(base+'/'+asset)).text());
+}
+assert.equal(deployed.join('\n'),source);
 const context=vm.createContext({localStorage:{getItem:()=>null},liveState:data});
 vm.runInContext(source.split("document.addEventListener('click'")[0],context);
 vm.runInContext('state=liveState;metric="locked_orders";indexData();',context);

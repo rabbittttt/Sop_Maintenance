@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import {randomUUID,randomFillSync} from 'node:crypto';
 import vm from 'node:vm';
 
@@ -40,7 +39,7 @@ const context=vm.createContext({document:{querySelector:s=>nodes.get(s)||null,qu
     requests.push({path,body});
     return path==='/api/user-views'?handleViewRequest(body):response();
   }});
-const source=readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
+import {dashboardSource as source} from './dashboard_source.mjs';
 vm.runInContext(source.split("document.addEventListener('click'")[0],context);
 const run=code=>vm.runInContext(code,context),plain=value=>JSON.parse(JSON.stringify(value));
 run("let searchTimer;state=initial;access.user=account;owner=account;viewStoreStatus='ready';indexData();toast=()=>{};openDialog=()=>{throw Error('unexpected modal')};");

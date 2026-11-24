@@ -1,5 +1,5 @@
 """Plan quantities and differences in immutable historical snapshots."""
-from .plan_scope import effective_products, is_model_plan, plan_total
+from .plan_scope import effective_products, plan_total
 from .source_rules import (_generations as source_generations, generation_parent,
                            normalize_generation, project_generation_sources)
 

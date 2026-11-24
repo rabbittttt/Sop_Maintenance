@@ -7,7 +7,7 @@ from .brand import brand_order_key
 from .plan_scope import effective_products, is_model_plan, plan_value
 from .source_rules import normalize_generation, project_generation_hierarchy, project_generation_sources
 from .store import month_range, stamp
-from .workbook import generation_model_groups
+from .plan_scope import generation_model_groups
 
 
 def capture_baseline(store, start, end, snapshot_id=None):

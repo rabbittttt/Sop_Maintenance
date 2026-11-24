@@ -225,7 +225,7 @@ class GatewayHTTPTest(unittest.TestCase):
             payload = {"filename": "plan.xlsx", "content_base64": base64.b64encode(b"fixture").decode()}
             self.assertEqual(request(server, "/sop/api/plans/import-xlsx", method="POST", body=payload)[0], 200)
             self.assertEqual(roundtrip.actors, [PRINCIPAL])
-            self.assertEqual(request(server, "/sop/api/plan-workbook/open", method="POST")[0], 403)
+            self.assertEqual(request(server, "/sop/api/plan-workbook/open", method="POST")[0], 404)
 
     def test_import_actor_reaches_committed_plan_audit_rows(self):
         from tests.test_roundtrip import RoundtripTest

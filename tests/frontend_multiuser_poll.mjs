@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
-const source=readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
+import {dashboardSource as source} from './dashboard_source.mjs';
 const dialog={open:false},document={hidden:false,querySelector:()=>dialog,querySelectorAll:()=>[]};
 const context=vm.createContext({document,localStorage:{getItem:()=>null},polls:0,loads:0,
   status:{status:'frontend',message:'',data_revision:'2:1:1',source_refresh:{}}});

@@ -11,7 +11,6 @@ from unittest.mock import patch
 from server import make_handler
 from sop.roundtrip import PlanRoundtrip
 from sop.store import SOPStore, ValidationError
-from sop.workbook import WorkbookSync
 from tests import test_roundtrip as fixture
 
 
@@ -102,28 +101,23 @@ class MultiuserImportTest(unittest.TestCase):
 
     def test_frontend_only_ignores_server_file_and_does_not_create_one(self):
         path = self.f.root / 'not-required' / 'maintenance.xlsx'
-        sync = WorkbookSync(self.f.store, path, frontend_only=True)
         self.f.service = PlanRoundtrip(self.f.store)
-        self.assertEqual(sync.sync()['status'], 'frontend')
         self.assertFalse(path.exists())
         first = self.submit()
         result = self.submit('workbook', first['confirmation_token'])
         self.assertTrue(result['ok'])
         self.assertFalse(path.exists())
         self.assertFalse(path.parent.exists())
-        before = sync.status()['data_revision']
+        before = self.f.store.data_revision()
         path.parent.mkdir()
         path.write_bytes(b'An obsolete or invalid server-side workbook')
-        self.assertEqual(sync.sync(force_export=True, choice='workbook')['status'], 'frontend')
         self.assertEqual(self.f.value(), 20)
         self.f.save('a', '2026-10', 77)
-        self.assertNotEqual(sync.status()['data_revision'], before)
+        self.assertNotEqual(self.f.store.data_revision(), before)
         self.assertEqual(path.read_bytes(), b'An obsolete or invalid server-side workbook')
 
     def test_real_http_conflict_flow_and_frontend_only_endpoints(self):
         path = self.f.root / 'maintenance.xlsx'
-        sync = WorkbookSync(self.f.store, path, frontend_only=True)
-        sync.sync()
         service = PlanRoundtrip(self.f.store)
         server = ThreadingHTTPServer(('127.0.0.1', 0), BaseHTTPRequestHandler)
         server.RequestHandlerClass = make_handler(self.f.store, self.f.root, server.server_port,

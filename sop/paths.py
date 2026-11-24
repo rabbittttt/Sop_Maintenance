@@ -1,4 +1,4 @@
-"""Shared paths for the editable plan and raw sales workbooks."""
+"""Resolve shared sources, the database directory, and service logs."""
 
 import os
 from pathlib import Path
@@ -44,13 +44,6 @@ def runtime_data_directory(root):
     """Prefer SOP_DATA_DIR (relative to root if needed), then the central database directory."""
     return project_path(root, os.environ["SOP_DATA_DIR"]) if os.environ.get("SOP_DATA_DIR") else persistent_directory(root)
 
-
-def plan_workbook_path(root):
-    if os.environ.get("SOP_PLAN_DIR"):
-        return project_path(root, os.environ["SOP_PLAN_DIR"]) / PLAN_WORKBOOK_NAME
-    shared_root = _shared_data_root(root)
-    directory = shared_root / "SOP计划" if shared_root is not None else Path(root) / "input_file"
-    return directory / PLAN_WORKBOOK_NAME
 
 
 def sales_source_files(source_dir):

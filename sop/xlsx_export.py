@@ -1,9 +1,4 @@
-"""Offline XLSX writer for dashboard exports.
-
-This mirrors the visible grid and trusted inline manifest produced by
-``scripts/build_export_workbook.mjs``.  It only renders a disposable download;
-the database and primary maintenance workbook are never changed here.
-"""
+"""Render a disposable plan download with its editable grid and import manifest."""
 from __future__ import annotations
 
 import json
@@ -17,7 +12,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 from .brand import brand_order_key
 from .plan_scope import MODEL_PLAN_LABEL, is_model_plan
-from .workbook import generation_model_groups
+from .plan_scope import generation_model_groups
 from .xlsx_style import PLAN_TITLE, plan_guidance, setup_plan_sheet, style_plan_row, write_formula_caches
 
 

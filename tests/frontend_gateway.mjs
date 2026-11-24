@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
-const source=readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
+import {dashboardSource as source} from './dashboard_source.mjs';
 const prefix=source.split("document.addEventListener('click'")[0];
 const plain=value=>JSON.parse(JSON.stringify(value));
 function element(id='',dataset={}) {

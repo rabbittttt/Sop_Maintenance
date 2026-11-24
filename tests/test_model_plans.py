@@ -6,13 +6,12 @@ import openpyxl
 
 from sop.plan_scope import MODEL_PLAN_LABEL, is_model_plan, plan_total
 from sop.store import TZ, ValidationError
-from sop.workbook import WorkbookSync, generation_model_groups
-from sop.xlsx_plan import write_plan_workbook
+from sop.plan_scope import generation_model_groups
 from sop.xlsx_export import write_export_workbook
 from sop.roundtrip import PlanRoundtrip
 from tests import test_grid_batch as grid
-from tests.test_workbook_sync import edit_cell
-from tests.test_inline_workbook import change_rows
+from tests.xlsx_edits import edit_cell
+from tests.xlsx_edits import change_rows
 
 
 class ModelPlansTest(unittest.TestCase):
@@ -144,18 +143,8 @@ class ModelPlansTest(unittest.TestCase):
             book.close()
         self.assertTrue(service.import_content(path.read_bytes())["ok"])
 
-    def test_maintenance_export_cached_totals_and_roundtrip_preserve_details(self):
+    def test_export_cached_totals_and_roundtrip_preserve_details(self):
         pid = self.create_model()
-        path = self.root / "maintenance.xlsx"
-        sync = WorkbookSync(self.store, path, writer=write_plan_workbook)
-        self.assertEqual(sync.sync()["status"], "synced")
-        book = openpyxl.load_workbook(path, data_only=True)
-        try:
-            sheet = book["SOP计划"]
-            model_row = next(r for r in sheet.iter_rows() if r[1].value == "A 2026款 合计")
-            self.assertEqual((model_row[12].value, model_row[15].value), (100, 100))  # Oct, annual.
-        finally:
-            book.close()
         roundtrip = PlanRoundtrip(self.store)
         clean, context = roundtrip.prepare(self.export_body(["2026-10", "2026-12"]))
         exported = self.root / "export.xlsx"

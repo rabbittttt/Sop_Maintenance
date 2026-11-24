@@ -13,9 +13,8 @@ import openpyxl
 from sop.roundtrip import PlanRoundtrip
 from sop.export import PlanExport
 from sop.store import SOPStore, TZ, ValidationError
-from sop.workbook import WorkbookSync
 from tests.test_roundtrip import download_fixture, export_body
-from tests.test_workbook_sync import NS, col_name, edit_cell, fixture_writer
+from tests.xlsx_edits import NS, col_name, edit_cell
 
 
 def rewrite_grid(path, grid, sheet=1):
@@ -237,12 +236,8 @@ class InlineRoundtripTest(unittest.TestCase):
             self.apply()
         self.assertEqual(len(self.store.list_products()["items"]), 3)
 
-    @unittest.skipUnless((Path.home() / ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe").is_file(), "Bundled spreadsheet runtime unavailable")
     def test_real_export_without_primary_workbook_can_be_imported(self):
-        sync = WorkbookSync(self.store, self.root / "primary.xlsx", writer=fixture_writer)
         self.service = PlanRoundtrip(self.store)
-        self.assertEqual(sync.sync()["status"], "synced")
-        sync.path.unlink()
 
         body = export_body()
         for row, pid in zip(body["rows"], body["row_product_ids"]):
@@ -252,7 +247,7 @@ class InlineRoundtripTest(unittest.TestCase):
         with PlanExport().generate(clean, roundtrip=context) as result:
             self.service.register(result.path, context)
             shutil.copy2(result.path, self.path)
-        self.assertFalse(sync.path.exists())
+        self.assertFalse((self.root / "primary.xlsx").exists())
         book = openpyxl.load_workbook(self.path, read_only=True, data_only=True)
         try:
             row = next(index for index, values in enumerate(book["SOP计划"].iter_rows(values_only=True), 1)
@@ -265,7 +260,6 @@ class InlineRoundtripTest(unittest.TestCase):
         self.assertTrue(imported["ok"], imported)
         self.assertEqual(self.quantity("a", "2026-10"), 41)
 
-    @unittest.skipUnless((Path.home() / ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe").is_file(), "Bundled spreadsheet runtime unavailable")
     def test_real_renderer_merged_labels_import_plan_edit(self):
         body = export_body()
         for row, pid in zip(body["rows"], body["row_product_ids"]):
@@ -300,7 +294,6 @@ class InlineRoundtripTest(unittest.TestCase):
         self.assertTrue(result["ok"], result)
         self.assertEqual(self.quantity("b", "2026-10"), 37)
 
-    @unittest.skipUnless((Path.home() / ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe").is_file(), "Bundled spreadsheet runtime unavailable")
     def test_real_renderer_register_and_structural_roundtrip(self):
         body = export_body()
         for row, pid in zip(body["rows"], body["row_product_ids"]):

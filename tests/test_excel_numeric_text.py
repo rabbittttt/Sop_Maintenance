@@ -8,7 +8,7 @@ from datetime import datetime
 import openpyxl
 
 from tests import test_download_contract as downloads
-from tests.test_workbook_sync import edit_cell
+from tests.xlsx_edits import edit_cell
 from sop.store import ValidationError
 from sop.table import _quantity
 

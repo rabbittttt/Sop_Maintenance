@@ -21,7 +21,7 @@ class FutureModelTest(unittest.TestCase):
         self.root = Path(temporary.name)
         rules = self.root / "shared_config.py"
         rules.write_text("MERGE_GROUPS = {}\n", encoding="utf-8")
-        environment = patch.dict(os.environ, {"SOP_SHARED_CONFIG": str(rules), "SOP_EXCEL_ENGINE": "python"})
+        environment = patch.dict(os.environ, {"SOP_SHARED_CONFIG": str(rules)})
         environment.start()
         self.addCleanup(environment.stop)
         self.source = self.root / "sales.json"

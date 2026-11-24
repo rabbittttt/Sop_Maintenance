@@ -36,7 +36,7 @@ def _fill(color):
 def setup_plan_sheet(sheet, *, last_row, last_column, visible_last_column,
                      columns, header_row=3, first_data_row=5,
                      identity_columns=3):
-    """Mirror the shared blue, two-row working grid of plan_sheet_style.mjs."""
+    """Apply the two-row plan header, dimensions, and editable cell styles."""
     sheet.sheet_view.showGridLines = False
     body_font = Font(name="Microsoft YaHei", size=11, color=INK)
     body_alignment = Alignment(vertical="center")

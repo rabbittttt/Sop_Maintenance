@@ -9,12 +9,10 @@ import uuid
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from server import make_handler
 from sop.store import ConflictError, SOPStore, TZ, ValidationError
-from sop.workbook import WorkbookSync
-from tests.test_catalog_api import SheetSync
 
 
 class GridBatchTest(unittest.TestCase):
@@ -232,11 +230,8 @@ class GridBatchTest(unittest.TestCase):
             self.store.save_grid_batch(request)
         self.assertEqual(self.tables(), before)
 
-    def test_real_workbook_sync_allows_web_only_edits_additions_and_deletions(self):
+    def test_web_edits_additions_and_deletions_require_no_file(self):
         maintenance = self.root / "input_file" / "SOP计划维护.xlsx"
-        writer = Mock(side_effect=AssertionError("Web-only maintenance must not generate Excel"))
-        sync = WorkbookSync(self.store, maintenance, writer=writer, root=self.root, auto_create=False)
-        self.assertEqual(sync.sync()["status"], "absent")
         http_server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
         http_server.RequestHandlerClass = make_handler(self.store, self.root, http_server.server_port)
         thread = threading.Thread(target=lambda: http_server.serve_forever(poll_interval=0.02), daemon=True)
@@ -252,8 +247,6 @@ class GridBatchTest(unittest.TestCase):
             self.assertEqual(self.plan()["sop"], 25)
             self.assertEqual(self.plan(result["entry_ids"]["new"], "2027-01")["sop"], 12)
             self.assertFalse(self.product("b")["active"])
-            self.assertEqual(sync.sync()["status"], "absent")
-            writer.assert_not_called()
             self.assertFalse(maintenance.exists())
         finally:
             connection.close()
@@ -261,7 +254,7 @@ class GridBatchTest(unittest.TestCase):
             thread.join()
             http_server.server_close()
 
-    def test_http_sync_precedes_revision_check_and_absent_file_is_not_created(self):
+    def test_http_revision_check_and_retry_require_no_file(self):
         http_server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
         http_server.RequestHandlerClass = make_handler(self.store, self.root, http_server.server_port)
         thread = threading.Thread(target=lambda: http_server.serve_forever(poll_interval=0.02), daemon=True)

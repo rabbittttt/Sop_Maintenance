@@ -39,7 +39,6 @@ class PythonRuntimePathsTest(unittest.TestCase):
         self.cwd.mkdir()
         for name in ("start-sop.ps1", "setup-environment.ps1", "requirements.txt"):
             shutil.copy2(ROOT / name, self.root / name)
-        shutil.copy2(ROOT / "scripts/runtime.mjs", self.root / "scripts/runtime.mjs")
         self.env = {key: value for key, value in os.environ.items()
                     if key not in {"SOP_PYTHON_PATH", "PYTHONHOME", "PYTHONPATH"}}
         self.python = (self.workspace / ".venv/Scripts/python.exe" if
@@ -60,14 +59,6 @@ class PythonRuntimePathsTest(unittest.TestCase):
     def run_resolvers(self, expected=None, error=None):
         commands = [["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
                      str(self.root / "start-sop.ps1"), "-CheckRuntime"]]
-        node = shutil.which("node")
-        if node:
-            probe = self.root / "scripts/probe.mjs"
-            probe.write_text("import path from 'node:path'; import {PYTHON} from './runtime.mjs'; "
-                             "if(process.env.PATH.split(path.delimiter)[0]!==path.dirname(PYTHON)) throw Error('PATH is not using the selected Python'); "
-                             "if(process.env.VIRTUAL_ENV!==path.dirname(path.dirname(PYTHON))) throw Error('VIRTUAL_ENV is not using the shared environment'); "
-                             "console.log(PYTHON);", encoding="utf-8")
-            commands.append([node, str(probe)])
         for command in commands:
             with self.subTest(launcher=Path(command[0]).name):
                 result = subprocess.run(command, cwd=self.cwd, env=self.env, capture_output=True,

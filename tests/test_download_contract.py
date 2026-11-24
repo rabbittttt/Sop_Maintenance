@@ -13,7 +13,7 @@ import openpyxl
 from server import make_handler
 from sop.export import PlanExport
 from sop.plan_scope import is_model_plan
-from sop.workbook import generation_model_groups
+from sop.plan_scope import generation_model_groups
 from sop.xlsx_export import write_export_workbook
 from tests import test_model_export_roundtrip as model_fixtures
 
@@ -30,7 +30,7 @@ class DownloadContractTest(unittest.TestCase):
         self.source_before = self.fixture.source.read_bytes()
         self.exports = self.fixture.root / "disposable-downloads"
         self.exports.mkdir()
-        self.exporter = PlanExport(writer=write_export_workbook, temp_root=self.exports)
+        self.exporter = PlanExport(temp_root=self.exports)
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
         self.server.RequestHandlerClass = make_handler(
             self.store, self.fixture.root, self.server.server_port,

@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
-const source=readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
+import {dashboardSource as source} from './dashboard_source.mjs';
 const element=()=>({innerHTML:'',textContent:'',value:'detail',disabled:false,inert:false,attrs:{},focusCount:0,
   setAttribute(k,v){this.attrs[k]=v;},removeAttribute(k){delete this.attrs[k];},focus(){this.focusCount++;}});
 const app=element(),control=element(),scroll={scrollLeft:91,scrollTop:12},dialog={open:false};

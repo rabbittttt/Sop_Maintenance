@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import {randomUUID,randomFillSync} from 'node:crypto';
 import vm from 'node:vm';
 
-const source=readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
+import {dashboardSource as source} from './dashboard_source.mjs';
 const month='2026-10',summary='智界 R7 2026款汇总';
 const totalLabel='车型总量（不分版本）';
 const parent={id:'summary-total',brand:'智界',model:'R7 2026款',catalog_model:'R7 2026款',version:totalLabel,

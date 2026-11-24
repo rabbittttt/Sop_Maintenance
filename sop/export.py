@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import subprocess
 import tempfile
@@ -14,9 +13,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from .paths import PROJECT_ROOT
-from .runtime import (ArtifactDependencyError, ensure_artifact_tool,
-                         missing_artifact_module, node_environment, node_executable, python_excel_requested)
+from .excel_worker import render
 from .store import ValidationError, validate_month
 
 MAX_REQUEST_BYTES = 8 * 1024 * 1024
@@ -105,54 +102,14 @@ def validate_export(body):
 
 
 class PlanExport:
-    def __init__(self, root=None, writer=None, temp_root=None, timeout=120):
-        self.root = Path(root or PROJECT_ROOT).resolve()
-        self.writer = writer or self._node_writer
+    def __init__(self, writer=None, temp_root=None, timeout=120):
+        self.writer = writer or self._write_workbook
         self.temp_root = Path(temp_root) if temp_root is not None else None
         self.timeout = timeout
         self.slots = threading.BoundedSemaphore(2)
 
-    def _python_writer(self, payload):
-        try:
-            from .xlsx_export import write_export_workbook
-            write_export_workbook(payload)
-        except ModuleNotFoundError as error:
-            if error.name != "openpyxl":
-                raise
-            raise ExportError("缺少 Python Excel 生成依赖，请安装 requirements.txt。") from error
-
-    def _node_writer(self, payload):
-        if python_excel_requested():
-            return self._python_writer(payload)
-        node = node_executable()
-        script = self.root / "scripts/build_export_workbook.mjs"
-        if not node or not script.is_file():
-            return self._python_writer(payload)
-        try:
-            ensure_artifact_tool(self.root, node)
-        except (ArtifactDependencyError, OSError):
-            return self._python_writer(payload)
-        try:
-            completed = subprocess.run([node, str(script)], input=json.dumps(payload, ensure_ascii=False, allow_nan=False),
-                                       text=True, encoding="utf-8", capture_output=True, timeout=self.timeout, cwd=self.root,
-                                       creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-                                       env=node_environment())
-        except OSError:
-            return self._python_writer(payload)
-        if completed.returncode:
-            if missing_artifact_module(completed.stderr or completed.stdout):
-                return self._python_writer(payload)
-            LOGGER.error("Excel export writer failed (exit %s): %s", completed.returncode,
-                         (completed.stderr or completed.stdout or "no diagnostic output")[-2000:])
-            raise ExportError("Excel导出生成失败，请稍后重试。")
-        try:
-            result = json.loads(completed.stdout)
-        except (TypeError, json.JSONDecodeError):
-            LOGGER.error("Excel export writer returned invalid JSON: %s", (completed.stderr or completed.stdout or "empty output")[-2000:])
-            raise ExportError("Excel导出组件未返回有效结果。")
-        if not isinstance(result, dict) or result.get("ok") is not True or result.get("output_path") != payload["output_path"]:
-            LOGGER.error("Excel export writer returned an unsuccessful or mismatched result.")
-            raise ExportError("Excel导出组件返回结果不一致。")
+    def _write_workbook(self, payload):
+        render("plan", payload, timeout=self.timeout)
 
     @staticmethod
     def _valid_workbook(path):

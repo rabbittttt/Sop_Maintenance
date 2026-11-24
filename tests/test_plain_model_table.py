@@ -14,8 +14,6 @@ import openpyxl
 from sop.model_table import parse_model_table
 from sop.plan_scope import MODEL_PLAN_LABEL
 from sop.store import SOPStore, TZ, ValidationError
-from sop.workbook import WorkbookSync
-from sop.xlsx_plan import write_plan_workbook
 from sop.xlsx_export import write_export_workbook
 
 
@@ -175,7 +173,7 @@ class PlainModelTableTest(unittest.TestCase):
                 source.write_text(json.dumps({"meta": {}, "products": [
                     {"id": pid, "brand": "智界", "model": "Future", "version": version, "generation": "智界 Future 2027款"}
                     for pid, version in (("max", "Max"), ("pro", "Pro"))], "sales": []}), encoding="utf-8")
-                with patch.dict(os.environ, {"SOP_SHARED_CONFIG": str(rules), "SOP_EXCEL_ENGINE": "python"}):
+                with patch.dict(os.environ, {"SOP_SHARED_CONFIG": str(rules)}):
                     store = SOPStore(root / "test.sqlite3", source, lambda: datetime(2026, 10, 29, 12, tzinfo=TZ))
                     try:
                         store.save_plans({"owner": "test", "changes": [
@@ -189,8 +187,10 @@ class PlainModelTableTest(unittest.TestCase):
                                     "model": "Future 2027款", "plan_level": "model",
                                     "plans": [] if model_value is None else [{"month": "2026-10", "sop": model_value}]}]})
                         target = root / "maintenance.xlsx"
-                        sync = WorkbookSync(store, target, writer=write_plan_workbook)
-                        self.assertEqual(sync.sync()["status"], "synced")
+                        from tests.legacy_model_sheet import historical_model_sheet
+                        book = historical_model_sheet("Future 2027款", include_model=add_model, quantity=model_value)
+                        book.save(target)
+                        book.close()
                         before = [tuple(row) for row in store.db.execute("SELECT * FROM plans ORDER BY product_id,month")]
                         if handwritten:
                             book = openpyxl.load_workbook(target)

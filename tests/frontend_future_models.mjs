@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import {randomUUID,randomFillSync} from 'node:crypto';
 import vm from 'node:vm';
 
@@ -21,7 +20,7 @@ const context=vm.createContext({initial:structuredClone(initial),
   if(path==='/api/state')return {ok:true,status:200,json:async()=>structuredClone(serverState)};
   throw Error('Unexpected request '+path);
  }});
-const source=readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
+import {dashboardSource as source} from './dashboard_source.mjs';
 vm.runInContext(source.split("document.addEventListener('click'")[0],context);
 const run=code=>vm.runInContext(code,context),plain=value=>JSON.parse(JSON.stringify(value));
 run("let searchTimer;state=initial;owner='测试';metric='locked_orders';toast=()=>{};openDialog=()=>{throw Error('unexpected modal')};indexData();planning()");

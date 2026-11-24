@@ -22,7 +22,8 @@ WEB_EXTENSIONS = {".html", ".css", ".js", ".mjs", ".json", ".svg", ".png", ".ico
                   ".jpg", ".jpeg", ".webp", ".gif", ".woff", ".woff2"}
 REQUIRED_FILES = {"server.py", "sop/__init__.py", "sop/gateway.py", "sop/paths.py", "sop/store.py",
                   "requirements.txt", "requirements-intranet.txt", "web/index.html",
-                  "integration/iis/SopIdentityBridge.cs"}
+                  "integration/iis/SopIdentityBridge.cs", "sop/excel_worker.py", "sop/xlsx_export.py",
+                  "sop/xlsx_backup.py", "web/app.js", "web/plan-excel.js", "web/history.js", "web/option-split.js"}
 
 
 def reject_reparse(path: Path) -> None:
@@ -52,7 +53,6 @@ def allowed_release_path(relative: str) -> bool:
         return path.suffix == ".py" or relative in {"requirements.txt", "requirements-intranet.txt", "README.md", "PORTAL-INTEGRATION.md"}
     return ((parts[0] == "web" and path.suffix.lower() in WEB_EXTENSIONS) or
             (len(parts) == 2 and parts[0] == "sop" and path.suffix == ".py") or
-            (len(parts) == 2 and parts[0] == "scripts" and path.suffix == ".mjs") or
             (len(parts) == 3 and parts[:2] == ["integration", "iis"] and path.suffix == ".cs"))
 
 
@@ -81,10 +81,6 @@ def source_files(source: Path) -> list[Path]:
             if not allowed_release_path(path.relative_to(source).as_posix()):
                 raise ValueError(f"Unexpected non-public file under web/: {path.relative_to(source)}")
             files.append(path)
-    scripts = source / "scripts"
-    if scripts.is_dir():
-        reject_reparse(scripts)
-        files.extend(path for path in scripts.iterdir() if path.is_file() and path.suffix == ".mjs")
     iis = source / "integration" / "iis"
     if iis.is_dir():
         reject_reparse(iis)

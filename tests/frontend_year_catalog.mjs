@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
 const nodes=new Map(),requests=[];
@@ -28,7 +27,7 @@ const initial={current_month:'2026-10',plan_end:'2027-12',meta:{},settings:{gene
   ],plans:[],sales:[],model_sales:[],shipments:[],workbook_sync:{status:'absent'}};
 const context=vm.createContext({document,localStorage:{getItem:()=>null,setItem(){}},initial,
   openForm,request:async(path,body)=>{requests.push({path,body:JSON.parse(JSON.stringify(body))});return{};}});
-const source=readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
+import {dashboardSource as source} from './dashboard_source.mjs';
 vm.runInContext(source.split("document.addEventListener('click'")[0],context);
 const run=code=>vm.runInContext(code,context),get=id=>nodes.get('#'+id);
 run('state=initial;indexData();api=request;openDialog=openForm;closeDialog=()=>{};load=async()=>{};productManager=()=>{};toast=()=>{}');

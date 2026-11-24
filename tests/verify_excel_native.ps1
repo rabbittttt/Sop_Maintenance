@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string[]]$Paths)
+param([Parameter(Mandatory=$true)][string[]]$Paths, [int]$AnnualFixtureRow = 0)
 # Optional Windows acceptance check using an installed Microsoft Excel.
 # Normal read-only open deliberately does not request Excel's repair mode.
 $ErrorActionPreference = 'Stop'
@@ -27,6 +27,15 @@ try {
                 if (-not $sopSheet.Columns.Item($sopColumn).Hidden) {
                     throw "Import-only column $sopColumn is visible: $sopFile"
                 }
+            }
+            if ($AnnualFixtureRow -gt 0) {
+                # Synthetic partial-year fixture: D/E are visible months, F is their annual formula.
+                $sopSheet.Range("D$AnnualFixtureRow").Value2 = [double]15
+                $sopExcel.Calculate()
+                if ($sopSheet.Range("F$AnnualFixtureRow").Value2 -ne 55) { throw 'Annual formula did not incorporate the edited month.' }
+                $sopSheet.Range("D${AnnualFixtureRow}:E${AnnualFixtureRow}").ClearContents()
+                $sopExcel.Calculate()
+                if ($sopSheet.Range("F$AnnualFixtureRow").Value2 -ne 10) { throw 'Clearing visible months lost the offscreen annual quantity.' }
             }
             [PSCustomObject]@{
                 File=$sopFile; Opened=$true; ExcelVersion=$sopExcel.Version;

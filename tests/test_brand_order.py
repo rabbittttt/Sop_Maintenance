@@ -1,6 +1,5 @@
 """Brand ordering is shared by the catalog and both editable Excel writers."""
 import json
-import os
 import tempfile
 import unittest
 from datetime import datetime
@@ -12,11 +11,9 @@ import openpyxl
 from sop.brand import BRAND_ORDER, brand_order_key
 from sop.roundtrip import PlanRoundtrip
 from sop.store import SOPStore, TZ
-from sop.workbook import WorkbookSync
 from sop.xlsx_export import _layout, write_export_workbook
-from sop.xlsx_plan import write_plan_workbook
 from tests import test_inline_renderer as fixtures
-from tests.test_workbook_sync import edit_cell
+from tests.xlsx_edits import edit_cell
 
 
 PRODUCTS = [{"id": str(index), "brand": brand, "model": f"M{index}", "version": "V1", "active": True}
@@ -31,7 +28,7 @@ EXPECTED = [*BRAND_ORDER, "OtherA", "OtherZ"]
 
 def payloads(products=PRODUCTS, **options):
     with patch.multiple(fixtures, PRODUCTS=products, PLANS=PLANS, LOOKUP=LOOKUP):
-        return fixtures.input_payload(), fixtures.export_payload(**options)
+        return fixtures.export_payload(**options)
 
 
 def brands_from_sheet(sheet):
@@ -74,16 +71,12 @@ class BrandOrderTest(unittest.TestCase):
                                                      item["model"], item["version"], item["id"]))
         self.assertEqual([item["id"] for item in actual], [item["id"] for item in expected])
 
-    def test_new_maintenance_and_download_layouts_share_brand_order(self):
-        maintenance, _ = payloads()
-        spec = maintenance["layout"]["sheets"][0]
-        self.assertEqual([row["labels"][1] for row in spec["rows"] if row["kind"] == "brand_total"],
-                         [brand + " 合计" for brand in EXPECTED])
-        expected_ids = [row["product_id"] for row in spec["rows"] if row["kind"] == "product"]
+    def test_download_layout_preserves_brand_order_and_model_blocks(self):
+        expected_ids = ["4", "z2", "za", "3", "2", "5", "0", "6", "1"]
         for locks in (False, True):
             for versions in (False, True):
                 with self.subTest(locks=locks, versions=versions):
-                    _, body = payloads(locks=locks, versions=versions)
+                    body = payloads(locks=locks, versions=versions)
                     layout = _layout(body)
                     labels = [row["labels"][1] for row in layout["rows"]
                               if row["kind"] == "brand_total" and row["metric"] == "SOP计划量"]
@@ -100,58 +93,12 @@ class BrandOrderTest(unittest.TestCase):
                     finally:
                         book.close()
 
-    def test_python_maintenance_export_parity_keeps_values_with_product_identity(self):
-        maintenance, exported = payloads()
-        paths = [self.root / "maintenance.xlsx", self.root / "export.xlsx"]
-        write_plan_workbook({**maintenance, "output_path": str(paths[0])})
-        write_export_workbook({**exported, "output_path": str(paths[1])})
-        books = [openpyxl.load_workbook(path, data_only=True) for path in paths]
-        try:
-            left, right = (book["SOP计划"] for book in books)
-            self.assertEqual(brands_from_sheet(left), EXPECTED)
-            self.assertEqual(brands_from_sheet(right), EXPECTED)
-            assert_brand_blocks(self, left)
-            assert_brand_blocks(self, right)
-            visible = maintenance["layout"]["sheets"][0]["visible_last_column"]
-            self.assertEqual(list(left.iter_rows(max_col=visible, values_only=True)),
-                             list(right.iter_rows(max_col=visible, values_only=True)))
-            for row in maintenance["layout"]["sheets"][0]["rows"]:
-                if row["kind"] == "product":
-                    self.assertEqual(left.cell(row["row"], 13).value,
-                                     LOOKUP[(row["product_id"], "2026-10")]["sop"])
-        finally:
-            for book in books:
-                book.close()
-
-    def test_prior_order_imports_unsynced_changes_before_refresh(self):
-        path = self.root / "maintenance.xlsx"
-        with patch.dict(os.environ, {"SOP_EXCEL_ENGINE": "python"}):
-            with patch("sop.store.brand_order_key", lambda brand: brand), \
-                    patch("sop.workbook.brand_order_key", lambda brand: brand), \
-                    patch("sop.workbook.PRESENTATION_VERSION", 3):
-                previous = WorkbookSync(self.store, path)
-                self.assertEqual(previous.sync()["status"], "synced")
-                token, context, *_ = previous._parse(path.read_bytes())
-                cell = next(item["cell"] for item in context["layout"]["cells"]
-                            if item["product_id"] == "0" and item["month"] == "2026-10")
-            edit_cell(path, cell, 41)
-            current = WorkbookSync(self.store, path)
-            status = current.sync()
-            self.assertEqual(status["status"], "synced", status)
-            self.assertNotEqual(current._parse(path.read_bytes())[0], token)
-        self.assertEqual(self.store.db.execute(
-            "SELECT sop FROM plans WHERE product_id='0' AND month='2026-10'").fetchone()[0], 41)
-        book = openpyxl.load_workbook(path, data_only=True)
-        try:
-            self.assertEqual(brands_from_sheet(book["SOP计划"]), EXPECTED)
-        finally:
-            book.close()
 
     def test_filtered_download_import_preserves_excluded_wenjie(self):
         self.store.save_plans({"owner": "test", "changes": [
             {**plan, "forecast": None, "revision": 0} for plan in PLANS]})
         selected = [product for product in PRODUCTS if product["brand"] != "问界"]
-        _, body = payloads(products=selected)
+        body = payloads(products=selected)
         body["selected_product_ids"] = [product["id"] for product in selected]
         body["row_product_ids"] = body.pop("roundtrip")["row_product_ids"]
         service = PlanRoundtrip(self.store)
@@ -174,24 +121,6 @@ class BrandOrderTest(unittest.TestCase):
         self.assertTrue(wenjie["active"])
         self.assertEqual(self.store.db.execute(
             "SELECT sop FROM plans WHERE product_id='0' AND month='2026-10'").fetchone()[0], 1)
-
-    @unittest.skipUnless(fixtures.NODE_AVAILABLE, "Bundled spreadsheet runtime unavailable")
-    def test_node_export_uses_same_order_and_identity_mapping(self):
-        _, body = payloads(locks=True)
-        with patch.object(fixtures, "OUT", self.root):
-            path = fixtures.generate("build_export_workbook.mjs", body, "brand-order")
-        book = openpyxl.load_workbook(path, data_only=True)
-        try:
-            sheet = book["SOP计划"]
-            self.assertEqual(brands_from_sheet(sheet), EXPECTED)
-            assert_brand_blocks(self, sheet)
-            spec = fixtures.manifest(book)
-            for row in spec["rows"]:
-                if row["kind"] == "product" and row.get("metric") == "SOP计划量":
-                    self.assertEqual(sheet.cell(row["row"], 13).value,
-                                     LOOKUP[(row["product_id"], "2026-10")]["sop"])
-        finally:
-            book.close()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""A successful Excel import materializes the configured maintenance workbook."""
+"""Excel imports update the database without writing the historical server-side file."""
 import io
 import os
 import unittest
@@ -6,11 +6,11 @@ from unittest.mock import patch
 
 import openpyxl
 
-from sop.paths import PLAN_WORKBOOK_NAME, plan_workbook_path
+from sop.paths import PLAN_WORKBOOK_NAME
 from sop.roundtrip import PlanRoundtrip
 from sop.store import ValidationError
 from tests import test_model_export_roundtrip as support
-from tests.test_workbook_sync import edit_cell
+from tests.xlsx_edits import edit_cell
 
 
 class ImportMaintenanceFileTest(unittest.TestCase):
@@ -25,10 +25,9 @@ class ImportMaintenanceFileTest(unittest.TestCase):
         environment = patch.dict(os.environ, {"SHARED_DATA_ROOT": "../工作台数据/shared", "SOP_PLAN_DIR": ""})
         environment.start()
         self.addCleanup(environment.stop)
-        self.path = plan_workbook_path(self.project)
+        self.path = self.shared / "SOP计划" / PLAN_WORKBOOK_NAME
         self.path.parent.mkdir(parents=True)
         self.f.service = PlanRoundtrip(self.f.store)
-        self.assertEqual(self.path, (self.shared / "SOP计划" / PLAN_WORKBOOK_NAME).resolve())
         self.assertEqual(list(self.path.parent.iterdir()), [])
 
     def plain(self, *rows):

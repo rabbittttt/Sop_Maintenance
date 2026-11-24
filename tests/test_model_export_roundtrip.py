@@ -10,13 +10,13 @@ from unittest.mock import patch
 
 import openpyxl
 
-from sop.plan_scope import MODEL_PLAN_LABEL, is_model_plan, plan_total
+from sop.plan_scope import is_model_plan
 from sop.roundtrip import PlanRoundtrip
 from sop.store import SOPStore, TZ, ValidationError
-from sop.workbook import generation_model_groups
+from sop.plan_scope import generation_model_groups
 from sop.xlsx_export import write_export_workbook
-from tests.test_inline_workbook import change_rows
-from tests.test_workbook_sync import edit_cell
+from tests.xlsx_edits import change_rows
+from tests.xlsx_edits import edit_cell
 
 
 class ModelExportRoundtripTest(unittest.TestCase):
@@ -26,7 +26,7 @@ class ModelExportRoundtripTest(unittest.TestCase):
         self.root = Path(temporary.name)
         self.rules = self.root / "shared_config.py"
         self.rules.write_text("MERGE_GROUPS = {'智界 Together 2026款汇总': ['智界 A 2026款', '智界 B 2026款']}\n", encoding="utf-8")
-        environment = patch.dict(os.environ, {"SOP_SHARED_CONFIG": str(self.rules), "SOP_EXCEL_ENGINE": "python"})
+        environment = patch.dict(os.environ, {"SOP_SHARED_CONFIG": str(self.rules)})
         environment.start(); self.addCleanup(environment.stop)
         self.source = self.root / "sales.json"
         self.payload = {"meta": {}, "products": [

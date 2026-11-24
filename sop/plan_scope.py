@@ -45,3 +45,26 @@ def plan_total(products, month, plans, field="sop"):
               for p in effective_products(products, month, plans, field)]
     known = [value for value in values if value is not None]
     return sum(known) if known else None
+
+
+def generation_model_groups(products):
+    """Return distinct parent/member model groups in parent-first display order."""
+    grouped, parents = {}, {}
+    for product in products:
+        key = (product.get("brand", ""), product.get("model", ""), product.get("parent_generation") or None)
+        grouped.setdefault(key, []).append(product)
+        if "summary_member_product_ids" in product and is_model_plan(product):
+            parents[product["summary_generation"]] = key
+    result, seen = [], set()
+    for key, members in grouped.items():
+        if key in seen or (key[2] in parents and parents[key[2]] != key):
+            continue
+        result.append((key, members))
+        seen.add(key)
+        summaries = [name for name, parent in parents.items() if parent == key]
+        for child, child_members in grouped.items():
+            if child not in seen and child[2] in summaries:
+                result.append((child, child_members))
+                seen.add(child)
+    result.extend((key, members) for key, members in grouped.items() if key not in seen)
+    return result, parents

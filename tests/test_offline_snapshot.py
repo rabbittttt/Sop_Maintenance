@@ -1,14 +1,11 @@
 """The offline snapshot writer keeps frozen values and the established tabs."""
 
-import json
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
 import openpyxl
 
-from sop.runtime import node_executable
 from sop.xlsx_backup import write_snapshot_workbook
 
 
@@ -74,31 +71,6 @@ class OfflineSnapshotWriterTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Duplicate"):
                 write_snapshot_workbook(payload)
             self.assertFalse(path.exists())
-
-    def test_matches_node_writer_values_when_bundled_package_is_available(self):
-        node = node_executable()
-        package = ROOT / "scripts" / "node_modules" / "@oai" / "artifact-tool" / "package.json"
-        if not node or not package.is_file():
-            self.skipTest("Node spreadsheet package unavailable")
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            offline = root / "offline.xlsx"
-            existing = root / "node.xlsx"
-            payload = frozen_payload(offline)
-            write_snapshot_workbook(payload)
-            payload["output_path"] = str(existing)
-            done = subprocess.run([node, str(ROOT / "scripts" / "build_snapshot_workbook.mjs")],
-                                  input=json.dumps(payload, ensure_ascii=False), capture_output=True,
-                                  text=True, encoding="utf-8", timeout=120, cwd=ROOT)
-            self.assertEqual(done.returncode, 0, done.stderr[-1000:])
-            a = openpyxl.load_workbook(offline, read_only=True, data_only=False)
-            b = openpyxl.load_workbook(existing, read_only=True, data_only=False)
-            try:
-                for name in a.sheetnames:
-                    self.assertEqual(list(a[name].values), list(b[name].values), name)
-            finally:
-                a.close()
-                b.close()
 
 
 if __name__ == "__main__":

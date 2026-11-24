@@ -1,5 +1,4 @@
 """Downloaded files merge only edited SOP cells into the unified plan store."""
-import copy
 import io
 import json
 import tempfile
@@ -11,9 +10,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from sop.roundtrip import PlanRoundtrip, MAX_UPLOAD_BYTES
-from sop.store import ConflictError, SOPStore, TZ, ValidationError
-from sop.workbook import WorkbookSync
-from tests.test_workbook_sync import NS, col_name, edit_cell, fixture_writer
+from sop.store import SOPStore, TZ, ValidationError
+from tests.xlsx_edits import NS, col_name, edit_cell
 
 
 def export_body(locks=True, versions=True, selected=("a", "b")):

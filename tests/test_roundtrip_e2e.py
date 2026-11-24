@@ -1,4 +1,4 @@
-"""Real Excel writer -> user edits -> shared store and maintenance workbook."""
+"""Real Excel writer -> user edits -> shared store."""
 import json
 import shutil
 import tempfile
@@ -11,15 +11,10 @@ import openpyxl
 from sop.export import PlanExport
 from sop.roundtrip import PlanRoundtrip
 from sop.store import SOPStore, TZ
-from sop.workbook import WorkbookSync
-from tests.test_workbook_sync import fixture_writer, edit_cell
-from tests.test_inline_workbook import change_rows
+from tests.xlsx_edits import edit_cell
+from tests.xlsx_edits import change_rows
 
 
-NODE = Path.home() / ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe"
-
-
-@unittest.skipUnless(NODE.is_file(), "Bundled spreadsheet runtime unavailable")
 class RoundtripE2ETest(unittest.TestCase):
     def test_real_download_edits_merge_back_without_losing_web_edits(self):
         temporary = tempfile.TemporaryDirectory()
@@ -44,8 +39,6 @@ class RoundtripE2ETest(unittest.TestCase):
         save("a", "2026-10", 10)
         save("a", "2026-12", 20)
         save("b", "2026-10", 5)
-        sync = WorkbookSync(store, root / "maintenance.xlsx", writer=fixture_writer)
-        self.assertEqual(sync.sync()["status"], "synced")
         importer = PlanRoundtrip(store)
         months = ["2026-10", "2026-12", "2027-12"]
         rows = [["车型汇总", "问界", "M5", "", "锁单数", 70, None, None, ""],
@@ -112,9 +105,8 @@ class RoundtripE2ETest(unittest.TestCase):
         self.assertTrue(importer.import_content(cleared.read_bytes())["ok"])
         self.assertEqual(value("a", "2026-12"), (None, 330))
         self.assertEqual(value("a", "2026-10"), (50, 330))
-        self.assertEqual(sync.status()["status"], "synced")
+        self.assertFalse((root / "maintenance.xlsx").exists())
         self.assertEqual(len(store.list_products()["items"]), 3)
-
 
 
 if __name__ == "__main__":

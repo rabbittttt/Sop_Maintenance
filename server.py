@@ -22,7 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from sop.paths import plan_workbook_path, runtime_data_directory, service_log_directory, source_directory
+from sop.paths import runtime_data_directory, service_log_directory, source_directory
 from sop.store import ConflictError, SOPStore, ValidationError
 from sop.backup import SnapshotBackup
 from sop.export import ExportError, MAX_REQUEST_BYTES, PlanExport
@@ -89,7 +89,7 @@ def open_workbench(url):
 
 def make_handler(store, web_root, port, *, snapshot_backup=None, plan_export=None,
                  source_refresh=None, plan_roundtrip=None, gateway=None, console_user=None):
-    plan_export = plan_export or PlanExport(root=ROOT)
+    plan_export = plan_export or PlanExport()
     frame_origin = os.environ.get("SOP_PARENT_ORIGIN", "")
     if frame_origin:
         frame_origin = canonical_origin(frame_origin)
@@ -452,9 +452,6 @@ def make_handler(store, web_root, port, *, snapshot_backup=None, plan_export=Non
                     else:
                         self._json({"error": "无法确认当前登录账号。"}, 403)
                     return
-                if gateway and path == "/api/plan-workbook/open":
-                    self._json({"error": "服务端不支持从浏览器打开服务器桌面文件，请下载副本。"}, 403)
-                    return
                 limit = 17 * 1024 * 1024 if path in {"/api/plans/import-xlsx", "/api/demand/import"} else MAX_REQUEST_BYTES
                 is_reconcile = path == "/api/reconcile" or path.startswith("/api/reconcile/")
                 if is_reconcile and path.rsplit("/", 1)[-1] in {"import", "restore"}:
@@ -581,7 +578,7 @@ def runtime_options(argv=None):
     parser.add_argument("--port", type=int, default=8876)
     parser.add_argument("--data-dir", type=Path)
     parser.add_argument("--web-dir", type=Path, default=ROOT / "web")
-    parser.add_argument("--plan-file", type=Path)
+    parser.add_argument("--plan-file", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--open-browser", action="store_true", help="就绪后自动打开工作台网页")
     parser.add_argument("--gateway-config", type=Path, help="IIS代理配置，显式启用子路径和可信身份模式")
     args = parser.parse_args(argv)
@@ -602,8 +599,6 @@ def runtime_options(argv=None):
             parser.error(f"代理配置无效：{error}")
         if args.open_browser:
             parser.error("代理服务不支持 --open-browser，请通过 IIS 入口访问。")
-    if args.plan_file is None:
-        args.plan_file = plan_workbook_path(ROOT)
     if args.data_dir is None:
         args.data_dir = runtime_data_directory(ROOT)
     os.environ["SOP_DATA_DIR"] = str(args.data_dir.resolve())

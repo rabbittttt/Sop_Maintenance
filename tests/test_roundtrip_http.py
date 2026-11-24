@@ -16,12 +16,10 @@ from server import make_handler
 from sop.export import PlanExport
 from sop.roundtrip import PlanRoundtrip
 from sop.store import ConflictError, SOPStore, TZ
-from sop.workbook import WorkbookSync
 from sop.xlsx_export import write_export_workbook
-from sop.xlsx_plan import write_plan_workbook
 from tests.test_plan_export import NoBusinessAccess, fixture_writer, payload
 from tests.test_roundtrip import export_body
-from tests.test_workbook_sync import edit_cell
+from tests.xlsx_edits import edit_cell
 
 
 class RoundtripStub:
@@ -140,8 +138,6 @@ class MissingPrimaryWorkbookHTTPTest(unittest.TestCase):
             store = SOPStore(root / "test.sqlite3", source, lambda: datetime(2026, 10, 25, 12, tzinfo=TZ))
             workbook_path = root / "SOP计划维护.xlsx"
 
-            sync = WorkbookSync(store, workbook_path, writer=write_plan_workbook, auto_create=False)
-            self.assertEqual(sync.sync()["status"], "absent")
             service = PlanRoundtrip(store)
             server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
             server.RequestHandlerClass = make_handler(store, root, server.server_port,

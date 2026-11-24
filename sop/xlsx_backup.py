@@ -197,7 +197,7 @@ def write_snapshot_workbook(payload: dict) -> None:
     grid_last_col = max(4, 4 + len(months))
     _base(grid, grid_last_row, grid_last_col)
     _put(grid, 2, 1, "鸿蒙智行 SOP计划快照")
-    _put(grid, 3, 1, "固定值备份，不参与维护表同步。空白表示待维护，0表示明确不安排。")
+    _put(grid, 3, 1, "快照保存截点时的计划量。空白表示待维护，0表示明确不安排。")
     for row, label, value in (
         (4, "业务日期", snapshot.get("business_date")),
         (5, "快照截点", _coalesce(snapshot.get("cutoff_at"), meta.get("snapshot_cutoff_at"))),
@@ -290,7 +290,7 @@ def write_snapshot_workbook(payload: dict) -> None:
         ["业务日期", snapshot.get("business_date")], ["规定截点", _coalesce(snapshot.get("cutoff_at"), meta.get("snapshot_cutoff_at"))],
         ["快照实际生成时间", snapshot.get("created_at")], ["Excel实际生成时间", exported_at],
         ["时间口径", "保留快照原始时间和时区偏移。业务截点按北京时间。"],
-        ["备份性质", "冻结SOP计划备份，不参与维护表同步。修改本文件不会更新看板。"],
+        ["备份性质", "截点时的 SOP 计划备份。"],
         ["数量单位", "辆"], ["空白与0", "空白表示未维护或快照未记录；0为明确保存的零计划。"],
         ["计划月份", "、".join(months) if months else "快照未记录计划月份"],
         ["快照产品数", len(original_products)], ["目录缺失产品数", orphan_count], ["原始计划记录数", len(plans)],

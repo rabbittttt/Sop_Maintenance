@@ -9,13 +9,12 @@ from unittest.mock import patch
 import openpyxl
 
 from sop.store import SOPStore, TZ, ValidationError
-from sop.workbook import WorkbookSync, generation_model_groups
+from sop.plan_scope import generation_model_groups
 from sop.roundtrip import PlanRoundtrip
 from sop.plan_scope import is_model_plan, plan_total
-from sop.xlsx_plan import write_plan_workbook
 from sop.xlsx_export import write_export_workbook
 from tests import test_inline_renderer as fixtures
-from tests.test_workbook_sync import edit_cell
+from tests.xlsx_edits import edit_cell
 
 
 class GenerationExcelTest(unittest.TestCase):
@@ -37,8 +36,6 @@ class GenerationExcelTest(unittest.TestCase):
         self.store.save_plans({"owner": "test", "changes": [
             {"product_id": pid, "month": "2026-10", "sop": value, "forecast": None, "revision": 0}
             for pid, value in [("a", 10), ("b", 20), ("c", 3)]]})
-        self.path = self.root / "maintenance.xlsx"
-        self.sync = WorkbookSync(self.store, self.path, writer=write_plan_workbook)
 
     def summary(self):
         self.store.update_settings({"generation_mode": "summary"})
@@ -47,8 +44,6 @@ class GenerationExcelTest(unittest.TestCase):
         self.parent = next(p["id"] for p in sales["products"] if p.get("identity_read_only"))
         return sales
 
-    def spec(self):
-        return self.sync._parse(self.path.read_bytes())[1]["layout"]["sheets"][0]
 
     def download(self, name="export", writer=write_export_workbook):
         sales = self.store.read_sales()
@@ -101,56 +96,7 @@ class GenerationExcelTest(unittest.TestCase):
             {"product_id": pid, "month": "2026-10", "sop": value, "forecast": None, "revision": 0}
             for pid, value in [("s9", 10), ("s9-new", 2), ("s9-beta", 4), ("s9t", 20),
                                (self.manual_id, 6), (self.dated_manual_id, 3)]]})
-        self.path = self.root / "beta-maintenance.xlsx"
-        self.sync = WorkbookSync(self.store, self.path, writer=write_plan_workbook)
 
-    def test_beta_detail_maintenance_separates_years_and_merges_same_year_labels(self):
-        self.beta_members()
-        self.assertEqual(self.sync.sync()["status"], "synced")
-        spec = self.spec()
-        by_id = {p["id"]: p for p in spec["products"]}
-        self.assertEqual(set(by_id), {"s9", "s9-new", "s9-beta", "s9t", self.manual_id, self.dated_manual_id,
-                                     next(p["id"] for p in self.store.read_sales()["products"] if p.get("identity_read_only"))})
-        self.assertEqual(by_id["s9"]["source_generation"], "享界 S9 2024款")
-        self.assertEqual(by_id["s9"]["model"], "S9 2024款")
-        self.assertEqual(by_id["s9-new"]["model"], "S9 2026款")
-        self.assertEqual(by_id["s9-beta"]["model"], "S9 2026款")
-        self.assertEqual(by_id[self.manual_id]["model"], "S9")
-        self.assertEqual(by_id[self.dated_manual_id]["model"], "S9 2026款")
-        self.assertEqual(by_id["s9-beta"]["source_generation"], "享界 S9 BETA 2026款")
-        self.assertFalse(by_id["s9-beta"].get("read_only"))
-        rows = {r["product_id"]: r["row"] for r in spec["rows"] if r["kind"] == "product"}
-        block = [rows[pid] for pid in ("s9-new", "s9-beta", self.dated_manual_id)]
-        book = openpyxl.load_workbook(self.path)
-        sheet = book["SOP计划"]
-        self.assertIn(f"B{min(block)}:B{max(block)}", set(map(str, sheet.merged_cells.ranges)))
-        self.assertEqual(sheet.cell(rows["s9"], 2).value, "S9 2024款")
-        self.assertEqual(sheet.cell(min(block), 2).value, "S9 2026款")
-        self.assertNotIn(rows["s9"], range(min(block), max(block) + 1))
-        for pid, row in rows.items():
-            self.assertEqual(sheet.cell(row, spec["product_column"]).value, pid)
-        self.assertFalse(sheet[f"M{rows['s9-beta']}"].protection.locked)
-        book.close()
-        edit_cell(self.path, f"M{rows['s9-beta']}", 9)
-        self.assertEqual(self.sync.sync()["status"], "synced")
-        self.assertEqual(self.store.db.execute("SELECT sop FROM plans WHERE product_id='s9-beta'").fetchone()[0], 9)
-        original = next(p for p in self.store.read_sales(include_excluded=True)["products"] if p["id"] == "s9-beta")
-        self.assertEqual(original["model"], "S9 BETA")
-        self.assertEqual(original["source_generation"], "享界 S9 BETA 2026款")
-        self.assertEqual(self.store.db.execute("SELECT COUNT(*) FROM plans").fetchone()[0], 6)
-
-    def test_year_label_is_a_valid_catalog_edit_baseline(self):
-        self.beta_members()
-        self.assertEqual(self.sync.sync()["status"], "synced")
-        spec = self.spec()
-        row = next(r["row"] for r in spec["rows"] if r.get("product_id") == "s9")
-        edit_cell(self.path, f"B{row}", "S9 Classic 2024款")
-        result = self.sync.sync()
-        self.assertEqual(result["status"], "synced", result)
-        renamed = next(p for p in self.store.read_sales()["products"] if p["id"] == "s9")
-        self.assertEqual(renamed["model"], "S9 Classic 2024款")
-        self.assertEqual(renamed["source_generation"], "享界 S9 2024款")
-        self.assertEqual(self.store.db.execute("SELECT sop FROM plans WHERE product_id='s9'").fetchone()[0], 10)
 
     def test_summary_exports_configured_year_only_and_old_detail_import_recalculates(self):
         self.beta_members()
@@ -172,8 +118,6 @@ class GenerationExcelTest(unittest.TestCase):
         self.assertEqual({p["id"] for p in summary["products"] if not p.get("read_only")}, {"s9", self.manual_id, self.parent})
         self.assertEqual(sum(p["sop"] for p in summary["plans"] if p["product_id"] in aggregate_ids), 29)
         self.assertEqual(plan_total(summary["products"], "2026-10", {(r["product_id"], r["month"]): r for r in summary["plans"]}), 45)
-        self.assertEqual(self.sync.sync()["status"], "synced")
-        self.assertEqual({p["model"] for p in self.spec()["products"]}, {"X4 2026款", "S9 2024款", "S9", "S9 2026款", "S9T 2026款"})
         service, path, _ = self.download("beta-summary")
         book = openpyxl.load_workbook(path)
         spec = fixtures.manifest(book)
@@ -199,37 +143,9 @@ class GenerationExcelTest(unittest.TestCase):
         original = next(p for p in self.store.read_sales(include_excluded=True)["products"] if p["id"] == "s9")
         self.assertEqual(original["source_generation"], "享界 S9 2024款")
         self.assertEqual(self.store.db.execute("SELECT sop FROM plans WHERE product_id='s9'").fetchone()[0], 12)
-        self.assertEqual(self.sync.sync()["status"], "synced")
-        spec = self.spec()
-        book = openpyxl.load_workbook(self.path, data_only=True)
-        self.assertEqual(sum(book["SOP计划"].cell(r["row"], 13).value or 0
-                             for r in spec["rows"] if r["kind"] == "product"), 53)
-        book.close()
         self.assertEqual(self.store.db.execute("SELECT COUNT(*) FROM plans").fetchone()[0], 6)
         self.assertEqual(self.store.db.execute("SELECT COUNT(*) FROM plans WHERE product_id LIKE 'group_%'").fetchone()[0], 0)
 
-    def test_maintenance_switches_views_preserving_pending_detail_edits(self):
-        self.assertEqual(self.sync.sync()["status"], "synced")
-        first = self.spec()
-        row_a = next(r["row"] for r in first["rows"] if r.get("product_id") == "a")
-        edit_cell(self.path, f"M{row_a}", 11)
-        self.summary()
-        self.assertEqual(self.sync.sync()["status"], "synced")
-        spec = self.spec()
-        row = next(r["row"] for r in spec["rows"] if r.get("product_id") == self.parent)
-        self.assertIn("2026-10", spec["editable_months_by_product"][self.parent])
-        book = openpyxl.load_workbook(self.path, data_only=True)
-        self.assertIsNone(book["SOP计划"][f"M{row}"].value)
-        total_row = next(r["row"] for r in spec["rows"] if r.get("label_b") == "Combo 2026款 合计")
-        self.assertEqual(book["SOP计划"][f"M{total_row}"].value, 31)
-        self.assertFalse(book["SOP计划"][f"M{row}"].protection.locked)
-        self.assertTrue(book["SOP计划"][f"C{row}"].protection.locked)
-        book.close()
-        self.store.update_settings({"generation_mode": "detail"})
-        self.assertEqual(self.sync.sync()["status"], "synced")
-        self.assertEqual({p["id"] for p in self.spec()["products"]}, {"a", "b", "c"})
-        self.assertEqual(self.store.db.execute("SELECT sop FROM plans WHERE product_id='a'").fetchone()[0], 11)
-        self.assertEqual(self.store.db.execute("SELECT COUNT(*) FROM plans WHERE product_id LIKE 'group_%'").fetchone()[0], 0)
 
     def test_export_accepts_parent_plan_and_rejects_rule_owned_identity_changes(self):
         self.summary()
@@ -273,39 +189,12 @@ class GenerationExcelTest(unittest.TestCase):
         derived = next(r for r in self.store.view_plans() if r["product_id"] == self.aggregate)
         self.assertEqual(derived["sop"], 45)
 
-    def test_changed_rule_rejects_stale_export_and_refreshes_old_readonly_maintenance(self):
+    def test_changed_rule_rejects_stale_export(self):
         self.summary()
         _, _, body = self.download()
-        self.assertEqual(self.sync.sync()["status"], "synced")
         self.config.write_text("MERGE_GROUPS = {'智界 Combo 2026款汇总': ['智界 A 2025款']}\n", encoding="utf-8")
         with self.assertRaisesRegex(ValidationError, "规则或展示模式已变化"):
             PlanRoundtrip(self.store).prepare(body)
-        self.assertEqual(self.sync.sync()["status"], "synced")
-        self.assertEqual({p["model"] for p in self.spec()["products"]}, {"Combo 2026款", "A 2025款", "B 2026款", "C 2026款"})
-
-    @unittest.skipUnless(fixtures.NODE_AVAILABLE, "Bundled spreadsheet runtime unavailable")
-    def test_node_writer_keeps_parent_inputs_editable_and_identity_readonly(self):
-        self.summary()
-        payload, _ = self.sync._context()
-        with patch.object(fixtures, "OUT", self.root):
-            maintenance = fixtures.generate("build_plan_workbook.mjs",
-                {**payload, "token": "node-maintenance", "generated_at": "2026-10-28T12:00:00+08:00"}, "node-maintenance")
-        row = next(r["row"] for r in payload["layout"]["sheets"][0]["rows"] if r.get("product_id") == self.parent)
-        book = openpyxl.load_workbook(maintenance)
-        self.assertIsNone(book["SOP计划"][f"M{row}"].value)
-        self.assertFalse(book["SOP计划"][f"M{row}"].protection.locked)
-        self.assertTrue(book["SOP计划"][f"C{row}"].protection.locked)
-        book.close()
-        def writer(payload):
-            with patch.object(fixtures, "OUT", self.root):
-                fixtures.generate("build_export_workbook.mjs", payload, "node-export")
-        service, path, _ = self.download("node-export", writer)
-        book = openpyxl.load_workbook(path)
-        row = next(r["row"] for r in fixtures.manifest(book)["rows"] if r.get("product_id") == self.parent and r.get("metric") == "SOP计划量")
-        self.assertIsNone(book["SOP计划"][f"D{row}"].value)
-        self.assertTrue(book["SOP计划"][f"C{row}"].protection.locked)
-        book.close()
-        self.assertEqual(service.import_content(path.read_bytes())["imported"], 0)
 
 
 if __name__ == "__main__":
