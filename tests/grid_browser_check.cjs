@@ -238,7 +238,7 @@ async function main() {
     assert.equal(await page.locator('#refresh-btn').isVisible(),false);
     assert.equal(await page.locator('.plan-actions button').allTextContents().then(labels=>labels.join(',')),'保存修改,取消');
     assert.equal(await page.locator('.sheet-tools .display-toggles').count(),1);
-    await page.evaluate(()=>pollWorkbookStatus());
+    await page.evaluate(()=>pollDataStatus());
     await page.locator('[data-page="history"]').click();
     assert.equal(stateRequests,requestsBefore,'Refreshing or polling cannot replace an active draft');
     assert.equal(await cell('a','2026-10').inputValue(),'0');
@@ -294,7 +294,13 @@ async function main() {
     const hiddenBefore=Number((await page.locator('[data-action=rows-restore]').innerText()).match(/（(\d+)）/)?.[1]||0);
     await ensureVersionsExpanded();
     const totalBefore=await page.locator('tr.total-row.metric-plan-row').innerText();
-    await page.locator('[data-hide-level="version"][data-hide-id="a"]').first().click();
+    const hideVersion=page.locator('[data-hide-level="version"][data-hide-id="a"]').first();
+    assert.equal(await hideVersion.innerText(),'');
+    assert.match(await hideVersion.getAttribute('aria-label'),/^隐藏.+/);
+    assert.equal(await hideVersion.locator('svg[aria-hidden="true"]').count(),1);
+    await hideVersion.focus();
+    assert.equal(await hideVersion.evaluate(button=>getComputedStyle(button).opacity),'1');
+    await hideVersion.press('Enter');
     assert.equal(await page.locator('[data-version="a"]').count(),0);
     assert.equal(await page.locator('tr.total-row.metric-plan-row').innerText(),totalBefore);
     await page.locator('[data-hide-level="model"][data-hide-id="智界|R7 2026款"]').first().click();
@@ -498,6 +504,18 @@ async function main() {
     await page.setViewportSize({width:375,height:812});
     await page.screenshot({path:path.join(out,'compact-mobile.png'),fullPage:true});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Small screens scroll the table, not the whole page');
+    state=fixture();
+    const touchPage=await browser.newPage({hasTouch:true, viewport:{width:375,height:812}});
+    await touchPage.route(`${origin}/**`,routeApp);
+    await touchPage.goto(origin+'/');
+    const hideBrand=touchPage.locator('[data-hide-level="brand"][data-hide-id="智界"]').first();
+    await hideBrand.waitFor();
+    assert.equal(await hideBrand.evaluate(el=>getComputedStyle(el).opacity),'1');
+    const tapTarget=await hideBrand.boundingBox();
+    assert.ok(tapTarget.width>=44 && tapTarget.height>=44);
+    await hideBrand.tap();
+    await hideBrand.waitFor({state:'detached'});
+    await touchPage.close();
     assert.deepEqual(errors,[]);
     console.log(`PASS (${origin}): direct webpage maintenance without Excel, empty-catalog creation, in-table editing, zero/blank, add/delete/undo/cancel, failure recovery, idempotent retry, draft guards, persistent hidden rows/totals, named view reload and readonly summary.`);
   } catch(error) {

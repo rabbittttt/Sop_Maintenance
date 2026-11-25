@@ -211,7 +211,7 @@ function rowViewKey(level,id){return JSON.stringify([hierarchicalPlanning()?'sum
 function rowHidden(level,id){return Object.hasOwn(hiddenRows,rowViewKey(level,id))||(hierarchicalPlanning()&&['detail','summary'].some(mode=>Object.hasOwn(hiddenRows,JSON.stringify([mode,level,id]))));}
 function productHidden(p){return rowHidden('brand',p.brand)||rowHidden('model',modelGroupKey(p))||rowHidden('version',p.id);}
 function hideRow(level,id,label){hiddenRows[rowViewKey(level,id)]=label;refreshHiddenRows();}
-function hiddenControl(level,id,label){return `<button class="row-visibility" type="button" data-hide-level="${level}" data-hide-id="${esc(id)}" data-hide-label="${esc(label)}" aria-label="隐藏${esc(label)}" title="隐藏此组行，不改变合计">隐藏</button>`;}
+function hiddenControl(level,id,label){return `<button class="row-visibility" type="button" data-hide-level="${level}" data-hide-id="${esc(id)}" data-hide-label="${esc(label)}" aria-label="隐藏${esc(label)}" title="隐藏此组行，不改变合计">${planToolIcon('hide')}</button>`;}
 function viewConfig(){return {generation_mode:generationMode(),hidden:{...hiddenRows},range,planYear,brand,model,query,showLocks,showDemand,showWenjie,bulkExpansion:{...bulkExpansion},rowExpansion:[...rowExpansion],showCommitteeLevels:[...showCommitteeLevels]};}
 function viewExpansionConfig(config){
   const legacy=config.allExpanded===true?true:null;
@@ -893,6 +893,7 @@ function planVersionRows(ps,visibleMonths) {
 }
 function planToolIcon(name) {
   const paths={
+    hide:'<path d="m3 3 18 18M10.6 5.2c.5-.1.9-.2 1.4-.2 6.5 0 10 7 10 7a18 18 0 0 1-3.1 3.9M6.1 6.1A19 19 0 0 0 2 12s3.5 7 10 7a12 12 0 0 0 5.3-1.4M10 10a2.8 2.8 0 0 0 4 4"/>',
     target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
     shipment:'<path d="M3 5h11v12H3zm11 4h4l3 4v4h-7"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
     weeks:'<path d="M4 20V4m0 16h16M8 16v-3m4 3V9m4 7V6"/>',
