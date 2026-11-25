@@ -21,13 +21,14 @@ function fixture(mode='detail') {
     meta:{quality:[],metrics:[]},workbook_sync:{status:'absent',message:'未建立维护表'},
     products:[product('x','智界','R7 2026款','Pro'),product('old','享界','S9 2024款','Max'),
       ...(mode==='summary'?[{...product('group','享界','X4 2026款','Max'),read_only:true,summary_generation:summaryGeneration,member_product_ids:['a','b']}]:members),
-      product('w','问界','M5 2025款','Max')],
+      product('w','问界','M5 2025款','Max'),product('sh','尚界','H5 2026款','Pro')],
     plans:[{product_id:'a',month:'2026-10',sop:100,forecast:111,revision:1},
       {product_id:'a',month:'2026-11',sop:150,forecast:160,revision:1},
       {product_id:'b',month:'2026-10',sop:200,forecast:220,revision:1},
       {product_id:'old',month:'2026-10',sop:80,forecast:81,revision:1},
       {product_id:'x',month:'2026-10',sop:20,forecast:22,revision:1},
       {product_id:'w',month:'2026-10',sop:40,forecast:44,revision:1},
+      {product_id:'sh',month:'2026-10',sop:30,forecast:30,revision:1},
       {product_id:'group',month:'2026-10',sop:300,forecast:331,revision:0}],
     sales:[],model_sales:[],shipments:[],history_months:['2026-07','2026-08','2026-09']};
   if(mode==='summary'){
@@ -182,7 +183,22 @@ async function main() {
     assert.equal(await page.locator('[data-action="view-save"]').isVisible(),true);
     assert.equal(await page.locator('[data-action="rows-restore"]').isVisible(),true);
     assert.deepEqual(await page.locator('.display-toggles button').allTextContents(),
-      ['显示锁单','显示要货计划','显示问界','展开版本','展开合并代际']);
+      ['显示锁单','显示要货计划','显示问界','显示尚界','展开版本','展开合并代际']);
+    const shangjieToggle=page.getByRole('button',{name:'显示尚界',exact:true});
+    const wenjieToggle=page.getByRole('button',{name:'显示问界',exact:true});
+    const brandRow=name=>page.locator('tr.group-row [data-hide-level="brand"][data-hide-id="'+name+'"]');
+    assert.equal(await shangjieToggle.getAttribute('aria-pressed'),'false');
+    assert.equal(await wenjieToggle.getAttribute('aria-pressed'),'false');
+    assert.equal(await brandRow('尚界').count()+await brandRow('问界').count(),0);
+    await shangjieToggle.press('Enter');
+    assert.equal(await shangjieToggle.getAttribute('aria-pressed'),'true');
+    assert.equal(await shangjieToggle.evaluate(button=>document.activeElement===button),true);
+    assert.equal(await brandRow('尚界').isVisible(),true);
+    assert.equal(await brandRow('问界').count(),0);
+    await page.locator('#brand-filter').selectOption('尚界');
+    await shangjieToggle.click();
+    assert.equal(await page.locator('#brand-filter').inputValue(),'');
+    assert.equal(await brandRow('尚界').count(),0);
     await page.screenshot({path:path.join(out,'direct-web-maintenance.png'),fullPage:true});
     const expandVersions = page.locator('[data-action="expand-versions"]');
     const ensureVersionsExpanded = async () => {
@@ -276,10 +292,10 @@ async function main() {
     await click('bulk-plan');
     await cell('a','2026-10').fill('99');
     const addModels=page.locator('[data-action="grid-add"]');
-    assert.equal(await addModels.count(),3);
+    assert.equal(await addModels.count(),2);
     assert.deepEqual(await page.locator('tr.group-row [data-action="grid-add"]').evaluateAll(
       buttons=>buttons.map(button=>button.dataset.newModelBrand).sort()
-    ),['享界','智界','问界'].sort());
+    ),['享界','智界'].sort());
     await page.locator('tr.group-row [data-action="grid-add"][data-new-model-brand="享界"]').click();
     const removable=await page.locator('[data-new-row]').last().getAttribute('data-new-row');
     assert.equal(await page.locator(`[data-grid-id="${removable}"][data-grid-field="brand"]`).inputValue(),'享界');
@@ -423,7 +439,7 @@ async function main() {
     assert.ok(spaceBeforeTable<180,`The table starts ${spaceBeforeTable}px below navigation`);
     const modelCell=()=>page.locator('[data-grid-model="S9 2026款"][data-grid-month="2026-10"]');
     const beforeDetails=JSON.stringify(state.plans.filter(p=>p.product_id==='a'||p.product_id==='b'));
-    for(const [input,total] of [['500',640],['0',140],['',440]]) {
+    for(const [input,total] of [['500',600],['0',100],['',400]]) {
       await page.locator('[data-action="bulk-plan"]').click();
       assert.equal(await page.locator('#grid-level').count(),0);
       assert.equal(await page.locator('[data-version="a"]').count(),0);

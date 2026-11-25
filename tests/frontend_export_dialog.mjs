@@ -11,7 +11,7 @@ const element=(props={})=>({checked:false,disabled:false,textContent:'',attrs:{}
   removeAttribute(k){delete this.attrs[k];},...props});
 context.captureDialog=markup=>{
   html=markup;
-  map=new Map(['excel-kind','export-plan-form','export-scope','export-selection','export-error','export-locks','export-wenjie','export-versions','export-filtered']
+  map=new Map(['excel-kind','export-plan-form','export-scope','export-selection','export-error','export-locks','export-wenjie','export-shangjie','export-versions','export-filtered']
     .map(id=>['#'+id,element()]));
   form=map.get('#export-plan-form');active=form;
   const save=element(),preset=element(),cancel=element();
@@ -20,7 +20,7 @@ context.captureDialog=markup=>{
   monthInputs=[...html.matchAll(/<input type="checkbox" name="export-month" value="([^"]+)"[^>]*>/g)]
     .map(match=>element({value:match[1],checked:/\bchecked\b/.test(match[0])}));
   const monthButtons=['current','all','none'].map(value=>element({dataset:{exportMonths:value}}));
-  controls=[...monthInputs,map.get('#export-locks'),map.get('#export-wenjie'),map.get('#export-versions'),map.get('#export-filtered'),save,preset,cancel,...monthButtons];
+  controls=[...monthInputs,map.get('#export-locks'),map.get('#export-wenjie'),map.get('#export-shangjie'),map.get('#export-versions'),map.get('#export-filtered'),save,preset,cancel,...monthButtons];
   form.querySelector=selector=>map.get(selector)||null;
   form.querySelectorAll=selector=>selector==='input[name="export-month"]'?monthInputs
     :selector==='[data-export-months]'?monthButtons:selector==='input,select,button'?controls:[];
@@ -34,8 +34,8 @@ context.closeCapturedDialog=()=>{active=null;};
 run(`
   openDialog=captureDialog;downloadPlanExport=captureDownload;closeDialog=closeCapturedDialog;
   state={current_month:'2026-10',plan_end:'2027-12',months:['2026-10','2027-12'],
-    products:[{id:'a',brand:'问界',model:'M5',version:'Max'},{id:'b',brand:'智界',model:'R7',version:'Pro'}]};
-  brand='问界';model='M5';query='';range='rolling';showLocks=true;
+    products:[{id:'a',brand:'问界',model:'M5',version:'Max'},{id:'b',brand:'智界',model:'R7',version:'Pro'},{id:'c',brand:'尚界',model:'H5',version:'Pro'}]};
+  showWenjie=true;showShangjie=true;brand='问界';model='M5';query='';range='rolling';showLocks=true;
   exportPlans();
 `);
 const chosen=()=>monthInputs.filter(input=>input.checked).map(input=>input.value);
@@ -48,7 +48,7 @@ assert.equal(map.get('#export-locks').checked,false);
 assert.equal(map.get('#export-versions').checked,true);
 assert.equal(map.get('#export-wenjie').checked,true);
 assert.equal(map.get('#export-filtered').checked,false);
-assert.match(map.get('#export-scope').textContent,/全部品牌.*2 个车型/);
+assert.match(map.get('#export-scope').textContent,/全部品牌.*3 个车型/);
 assert.equal(map.get('button[type="submit"]').textContent,'导出维护模板');
 
 // User customizations remain available and can be reset in one click.
@@ -78,21 +78,27 @@ assert.equal(chosen().length,24);
 assert.equal(map.get('#export-error').textContent,'');
 fail=false;
 await submit();
-assert.deepEqual(submitted,{includeLocks:false,includeVersions:true,includeWenjie:true,allProducts:true,selectedMonths:chosen()});
+assert.deepEqual(submitted,{includeLocks:false,includeVersions:true,includeWenjie:true,includeShangjie:true,allProducts:true,selectedMonths:chosen()});
 assert.equal(active,null,'A successful export closes cleanly without touching removed dialog elements.');
 
 // The export brand option follows the page initially but can be overridden.
-run("showWenjie=false;brand='';model='';exportPlans()");
+run("showWenjie=false;showShangjie=false;brand='';model='';exportPlans()");
 assert.equal(map.get('#export-wenjie').checked,false);
-assert.match(map.get('#export-scope').textContent,/不含问界.*1 个车型/);
+assert.equal(map.get('#export-shangjie').checked,false);
+assert.match(map.get('#export-scope').textContent,/不含问界、尚界.*1 个车型/);
 await submit();
 assert.equal(submitted.includeWenjie,false);
+assert.equal(submitted.includeShangjie,false);
 run('exportPlans()');
+map.get('#export-shangjie').checked=true;map.get('#export-shangjie').onchange();
+assert.match(map.get('#export-scope').textContent,/不含问界.*2 个车型/);
+assert.equal(run('showShangjie'),false);
 map.get('#export-wenjie').checked=true;map.get('#export-wenjie').onchange();
-assert.match(map.get('#export-scope').textContent,/全部品牌.*2 个车型/);
+assert.match(map.get('#export-scope').textContent,/全部品牌.*3 个车型/);
 assert.equal(run('showWenjie'),false,'Export choices must not change the page preference.');
 map.get('#export-wenjie').checked=false;map.get('#export-wenjie').onchange();
 map.get('[data-export-preset="maintenance"]').onclick();
 assert.equal(map.get('#export-wenjie').checked,true,'Restore maintenance format includes all brands.');
+assert.equal(map.get('#export-shangjie').checked,true);
 assert.equal(map.get('button[type="submit"]').textContent,'导出维护模板');
 console.log('PASS: full maintenance defaults, custom scope/months/metrics, reset, export errors and successful close.');

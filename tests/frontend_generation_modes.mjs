@@ -15,7 +15,7 @@ let serverState=structuredClone(base),status={status:'absent',generation_view:se
 let post,reads=0,readFailures=[];
 const connectionFailure=message=>Object.assign(new Error(message),{connection:true});
 const ruleFailure=message=>Object.assign(new Error(message),{status:400});
-const context=vm.createContext({localStorage:{getItem:()=>null},
+const context=vm.createContext({localStorage:{getItem:key=>['sop-show-wenjie','sop-show-shangjie'].includes(key)?'true':null},
   document:{hidden:false,querySelector:s=>nodes.get(s)||null,querySelectorAll:s=>s==='.table-scroll'?[scroll]:[]},
   requestAPI:async(path,body)=>{requests.push({path,body});
     if(path==='/api/settings')return post(body);

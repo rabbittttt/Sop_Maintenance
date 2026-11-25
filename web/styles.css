@@ -708,7 +708,7 @@ dialog .subtitle { margin-bottom: 23px; }
 }
 .lock-toggle[aria-pressed="true"] { background: #e6eefb; border-color: #7298c6; color: #174786; }
 .lock-toggle::before { content: ''; display: inline-block; width: 12px; height: 12px; border: 1px solid #8b98a8; border-radius: 2px; background: #fff; }
-.lock-toggle[aria-pressed="true"]::before { content: '✓'; background: #1768a9; border-color: #1768a9; color: #fff; font-size: 10px; line-height: 12px; text-align: center; }
+.lock-toggle[aria-pressed="true"]::before { content: '✓'; content: '✓' / ''; background: #1768a9; border-color: #1768a9; color: #fff; font-size: 10px; line-height: 12px; text-align: center; }
 dialog.export-dialog { width: min(720px, calc(100vw - 32px)); padding: 24px; }
 .export-dialog .subtitle { margin-bottom: 16px; }
 .export-dialog .dialog-actions { margin-top: 16px; padding-top: 14px; }

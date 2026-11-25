@@ -130,7 +130,7 @@ assert.match(closed,/closed-month[^]*?未开放/);
 const app={innerHTML:''};
 context.document={querySelector:s=>s==='#app'?app:null};
 vm.runInContext(`
-  state.products.forEach(p=>p.brand='问界');state.meta={};
+  showWenjie=true;state.products.forEach(p=>p.brand='问界');state.meta={};
   state.months=Array.from({length:22},(_,i)=>shift('2026-03',i));
   state.plan_end='2027-12';target='2026-10';planning();
 `,context);
@@ -317,7 +317,7 @@ vm.runInContext(`
     ],
     model_sales:[{generation:'g',month:'2026-05',metric:'locked_orders',value:253}]
   };
-  metric='locked_orders';indexData();planning();
+  showWenjie=true;metric='locked_orders';indexData();planning();
 `,screenContext);
 assert.match(screen.innerHTML,/data-action="toggle-locks" aria-pressed="false"/);
 assert.doesNotMatch(screen.innerHTML,/data-version="a"[^>]*data-plan-metric="locks"/);

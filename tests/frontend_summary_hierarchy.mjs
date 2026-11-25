@@ -114,6 +114,9 @@ run(`state.committee={previous_period:'2026-09',amounts:[
   {level:3,model_key:parentKey,month:'2026-10',sop:0}
 ]};indexData();planning()`);
 const committeeRow=level=>app.innerHTML.match(new RegExp(`<tr class="committee-row" data-committee-level="${level}" data-committee-model="[^\"]+"[^]*?<\\/tr>`))?.[0];
+assert.deepEqual(plain(run('showCommitteeLevels')),[false,false,false]);
+for(const level of [1,2,3])assert.equal(committeeRow(level),undefined);
+for(const level of [1,2,3])await run("handleAction('toggle-committee',{dataset:{committeeLevel:"+level+"}})");
 assert.deepEqual(plain(run('showCommitteeLevels')),[true,true,true]);
 assert.match(app.innerHTML,/上期计委[^]*?data-committee-level="1"[^]*?data-committee-level="2"[^]*?data-committee-level="3"[^]*?data-action="toggle-wenjie"/);
 assert.match(app.innerHTML,/rowspan="5"/);
@@ -180,7 +183,7 @@ const rootOnlyExport=plain(run("buildPlanExport({includeLocks:true,includeVersio
 assert(rootOnlyExport.selectedProductIds.every(id=>initial.products.some(p=>p.id===id)));
 assert(rootOnlyExport.rowParentGenerations.every(value=>value==null));
 assert(rootOnlyExport.rows.every(row=>row[0]==='车型汇总'));
-assert.equal(run("exportScope({allProducts:true})"),'全部品牌 · 全部车型');
+assert.equal(run("exportScope({allProducts:true})"),'全部品牌 · 全部车型（不含问界、尚界）');
 const independentExport=plain(run("buildPlanExport({includeLocks:false,includeVersions:true,selectedMonths:['2026-10']},state.products.filter(p=>p.brand==='享界'))"));
 assert.deepEqual(independentExport.selectedProductIds,['standalone'],'A filtered parent scope must not pull unrelated members into the workbook.');
 

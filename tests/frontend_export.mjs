@@ -56,12 +56,12 @@ run(`
       {generation:'b-m5',month:'2026-02',metric:'locked_orders',value:9}
     ]
   };
-  metric='locked_orders';brand='';model='';query='';range='rolling';indexData();
+  showWenjie=true;showShangjie=true;metric='locked_orders';brand='';model='';query='';range='rolling';indexData();
 `);
 
 const options = {includeLocks:true,includeVersions:true,selectedMonths:['2026-02','2026-01','2026-02']};
 const maintenanceDefaults = get('maintenanceExportOptions()');
-assert.deepEqual(maintenanceDefaults, {includeLocks:false,includeVersions:true,includeWenjie:true,allProducts:true,
+assert.deepEqual(maintenanceDefaults, {includeLocks:false,includeVersions:true,includeWenjie:true,includeShangjie:true,allProducts:true,
   selectedMonths:Array.from({length:24},(_,i)=>`${2026+Math.floor(i/12)}-${String(i%12+1).padStart(2,'0')}`)});
 run("brand='问界';model='M5';query='Max';range='annual';planYear='2027';showLocks=true");
 assert.deepEqual(get('maintenanceExportOptions()'), maintenanceDefaults,
@@ -276,7 +276,7 @@ assert.deepEqual(revokedURLs, ['blob:test-plan-workbook']);
 assert.equal(messages.length, 1);
 
 // Hiding a brand scopes both visible totals and the trusted export catalog.
-run('setWenjieVisibility(false)');
+run("setOptionalBrandVisibility('问界',false)");
 assert.deepEqual(get('products().map(p=>p.id)'), ['b1']);
 assert.equal(get("sumPlan(products(),'2026-01','sop').value"), 7);
 assert.equal(get("sumSales(products(),'2026-01',salesIndex,true).value"), 0);
@@ -289,7 +289,7 @@ assert.ok(hiddenBrandPayload.rows.every(row=>row[1]==='智界'));
 assert.match(hiddenBrandPayload.scope,/不含问界/);
 assert.equal(get('exportProducts(maintenanceExportOptions()).length'),5,'The full maintenance template retains hidden brands.');
 assert.equal(get('state.products.length'),5,'Visibility never removes a catalog record.');
-run('setWenjieVisibility(true)');
+run("setOptionalBrandVisibility('问界',true)");
 
 // Download requests pin the displayed rule revision for server-side validation.
 run("state.generation_view={mode:'summary',rule_signature:'live-rule-revision'}");

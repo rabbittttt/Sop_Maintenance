@@ -1,6 +1,6 @@
 function exportableMonths() { return [...new Set([...planMonths(),...months()])].sort(); }
 function maintenanceExportOptions() {
-  return {includeLocks:false,includeVersions:true,includeWenjie:true,selectedMonths:planMonths(),allProducts:true};
+  return {includeLocks:false,includeVersions:true,includeWenjie:true,includeShangjie:true,selectedMonths:planMonths(),allProducts:true};
 }
 function buildPlanExport({includeLocks=false,includeVersions=true,selectedMonths=[]}={},ps=products()) {
   if(generationViewError)throw new Error(generationViewError);
@@ -54,10 +54,10 @@ function buildPlanExport({includeLocks=false,includeVersions=true,selectedMonths
   }
   return {headers:['层级','品牌','车型',...(includeVersions?['版本']:[]),'指标',...chosen,'数据说明'],rows,selectedMonths:chosen,annualPlans,rowProductIds,selectedProductIds:ps.map(p=>p.id),...(hierarchy?{rowParentGenerations}:{})};
 }
-function exportProducts(options) { return products({includeWenjie:options.includeWenjie??showWenjie,applyFilters:!options.allProducts}); }
+function exportProducts(options) { return products({includeWenjie:options.includeWenjie??showWenjie,includeShangjie:options.includeShangjie??showShangjie,applyFilters:!options.allProducts}); }
 function exportScope(options) {
   const scope=options.allProducts?'全部品牌 · 全部车型':[brand||'全部品牌',model||'全部车型',query?`搜索“${query}”`:''].filter(Boolean).join(' · ');
-  return scope+((options.includeWenjie??showWenjie)?'':'（不含问界）')+(hierarchicalPlanning()?'':' · '+generationModeLabel());
+  return scope+excludedBrandNote(options.includeWenjie??showWenjie,options.includeShangjie??showShangjie)+(hierarchicalPlanning()?'':' · '+generationModeLabel());
 }
 async function downloadPlanExport(options) {
   const result=buildPlanExport(options,exportProducts(options)),chosen=result.selectedMonths,includeVersions=result.headers.includes('版本');
@@ -78,19 +78,19 @@ function exportPlans(kind='sop') {
   if(kind==='demand')return exportDemandPlans();
   const defaults=maintenanceExportOptions(),maintenance=new Set(defaults.selectedMonths),available=exportableMonths(),current=new Set(months());
   const years=[...new Set(available.map(m=>m.slice(0,4)))],hasFilter=!!(brand||model||query);
-  openDialog(`<form id="export-plan-form"><h2>导出Excel</h2>${excelKindSelector('sop')}<p id="export-scope" class="subtitle"></p><div id="export-error" class="inline-error" role="alert"></div><fieldset class="export-content-options"><legend>导出内容</legend><label class="export-check"><input type="checkbox" id="export-wenjie" checked><span>包含问界</span></label><label class="export-check"><input type="checkbox" id="export-locks"><span>增加锁单行</span></label><label class="export-check"><input type="checkbox" id="export-versions" checked><span>${hierarchicalPlanning()?'包含单代际及版本明细':generationMode()==='summary'?'包含版本明细（只读）':'包含版本明细'}</span></label>${hasFilter?'<label class="export-check"><input type="checkbox" id="export-filtered"><span>仅导出当前筛选</span></label>':''}</fieldset><div class="export-month-heading"><h3>导出月份</h3><div class="toolbar"><button type="button" class="button ghost small" data-export-preset="maintenance">恢复完整模板</button><button type="button" class="button ghost small" data-export-months="current">当前视图</button><button type="button" class="button ghost small" data-export-months="all">全部月份</button><button type="button" class="button ghost small" data-export-months="none">清空</button></div></div><div class="export-month-list">${years.map(y=>`<fieldset class="export-month-year"><legend>${y}年</legend><div class="export-month-grid">${available.filter(m=>m.startsWith(y+'-')).map(m=>`<label class="export-check"><input type="checkbox" name="export-month" value="${m}" aria-label="${y}年${Number(m.slice(5))}月" ${maintenance.has(m)?'checked':''}><span>${Number(m.slice(5))}月</span></label>`).join('')}</div></fieldset>`).join('')}</div><p id="export-selection" class="export-selection" role="status"></p><div class="dialog-actions">${button('取消','close-dialog')}<button type="submit" class="button primary">导出维护模板</button></div></form>`);
+  openDialog(`<form id="export-plan-form"><h2>导出Excel</h2>${excelKindSelector('sop')}<p id="export-scope" class="subtitle"></p><div id="export-error" class="inline-error" role="alert"></div><fieldset class="export-content-options"><legend>导出内容</legend><label class="export-check"><input type="checkbox" id="export-wenjie" checked><span>包含问界</span></label><label class="export-check"><input type="checkbox" id="export-shangjie" checked><span>包含尚界</span></label><label class="export-check"><input type="checkbox" id="export-locks"><span>增加锁单行</span></label><label class="export-check"><input type="checkbox" id="export-versions" checked><span>${hierarchicalPlanning()?'包含单代际及版本明细':generationMode()==='summary'?'包含版本明细（只读）':'包含版本明细'}</span></label>${hasFilter?'<label class="export-check"><input type="checkbox" id="export-filtered"><span>仅导出当前筛选</span></label>':''}</fieldset><div class="export-month-heading"><h3>导出月份</h3><div class="toolbar"><button type="button" class="button ghost small" data-export-preset="maintenance">恢复完整模板</button><button type="button" class="button ghost small" data-export-months="current">当前视图</button><button type="button" class="button ghost small" data-export-months="all">全部月份</button><button type="button" class="button ghost small" data-export-months="none">清空</button></div></div><div class="export-month-list">${years.map(y=>`<fieldset class="export-month-year"><legend>${y}年</legend><div class="export-month-grid">${available.filter(m=>m.startsWith(y+'-')).map(m=>`<label class="export-check"><input type="checkbox" name="export-month" value="${m}" aria-label="${y}年${Number(m.slice(5))}月" ${maintenance.has(m)?'checked':''}><span>${Number(m.slice(5))}月</span></label>`).join('')}</div></fieldset>`).join('')}</div><p id="export-selection" class="export-selection" role="status"></p><div class="dialog-actions">${button('取消','close-dialog')}<button type="submit" class="button primary">导出维护模板</button></div></form>`);
   $('#excel-kind').onchange=e=>exportPlans(e.target.value);
   const form=$('#export-plan-form'),monthInputs=$$('input[name="export-month"]',form),save=$('button[type="submit"]',form);
-  const versionOption=$('#export-versions',form),lockOption=$('#export-locks',form),wenjieOption=$('#export-wenjie',form),filterOption=$('#export-filtered',form);
+  const versionOption=$('#export-versions',form),lockOption=$('#export-locks',form),wenjieOption=$('#export-wenjie',form),shangjieOption=$('#export-shangjie',form),filterOption=$('#export-filtered',form);
   const reset=()=>{
-    versionOption.checked=defaults.includeVersions;lockOption.checked=defaults.includeLocks;wenjieOption.checked=defaults.includeWenjie;
+    versionOption.checked=defaults.includeVersions;lockOption.checked=defaults.includeLocks;wenjieOption.checked=defaults.includeWenjie;shangjieOption.checked=defaults.includeShangjie;
     if(filterOption)filterOption.checked=false;
     monthInputs.forEach(input=>input.checked=maintenance.has(input.value));
   };
   const update=(clearError=true)=>{
     const selectedMonths=monthInputs.filter(el=>el.checked).map(el=>el.value),count=selectedMonths.length,versions=versionOption.checked;
-    const options={allProducts:!filterOption?.checked,includeWenjie:wenjieOption.checked},ps=exportProducts(options),scope=exportScope(options);
-    const template=versions&&!lockOption.checked&&wenjieOption.checked&&!filterOption?.checked&&count===maintenance.size&&selectedMonths.every(m=>maintenance.has(m));
+    const options={allProducts:!filterOption?.checked,includeWenjie:wenjieOption.checked,includeShangjie:shangjieOption.checked},ps=exportProducts(options),scope=exportScope(options);
+    const template=versions&&!lockOption.checked&&wenjieOption.checked&&shangjieOption.checked&&!filterOption?.checked&&count===maintenance.size&&selectedMonths.every(m=>maintenance.has(m));
     $('#export-scope',form).textContent=`${scope} · ${new Set(ps.map(p=>JSON.stringify([p.brand,p.model]))).size} 个车型 / ${ps.length} 个版本`;
     $('#export-selection',form).textContent=count?`已选 ${count} 个月`:'请至少选择一个月份';
     save.textContent=template?'导出维护模板':versions?'导出版本计划':'导出车型计划';
@@ -99,10 +99,10 @@ function exportPlans(kind='sop') {
   };
   $('[data-export-preset="maintenance"]',form).onclick=()=>{reset();update();};
   $$('[data-export-months]',form).forEach(el=>el.onclick=()=>{monthInputs.forEach(input=>input.checked=el.dataset.exportMonths==='all'||(el.dataset.exportMonths==='current'&&current.has(input.value)));update();});
-  [...monthInputs,versionOption,lockOption,wenjieOption,...(filterOption?[filterOption]:[])].forEach(el=>el.onchange=()=>update());
+  [...monthInputs,versionOption,lockOption,wenjieOption,shangjieOption,...(filterOption?[filterOption]:[])].forEach(el=>el.onchange=()=>update());
   form.onsubmit=async e=>{
     e.preventDefault();if(form.getAttribute('aria-busy')==='true')return;
-    const options={includeLocks:lockOption.checked,includeVersions:versionOption.checked,includeWenjie:wenjieOption.checked,selectedMonths:monthInputs.filter(el=>el.checked).map(el=>el.value),allProducts:!filterOption?.checked};
+    const options={includeLocks:lockOption.checked,includeVersions:versionOption.checked,includeWenjie:wenjieOption.checked,includeShangjie:shangjieOption.checked,selectedMonths:monthInputs.filter(el=>el.checked).map(el=>el.value),allProducts:!filterOption?.checked};
     const controls=$$('input,select,button',form),previous=controls.map(el=>el.disabled);
     form.setAttribute('aria-busy','true');controls.forEach(el=>el.disabled=true);save.textContent='正在生成Excel…';$('#export-error',form).textContent='';
     try{await downloadPlanExport(options);if($('#export-plan-form')===form)closeDialog();}
@@ -111,6 +111,7 @@ function exportPlans(kind='sop') {
   };
   reset();
   wenjieOption.checked=showWenjie;
+  shangjieOption.checked=showShangjie;
   update();
 }
 const MAX_PLAN_IMPORT_BYTES=12*1024*1024;
