@@ -35,6 +35,12 @@ class ReleaseSmokeTest(unittest.TestCase):
             env = {**os.environ, "PLANHUB_DATA_ROOT": str(root), "SOP_DATA_DIR": str(data),
                    "SOP_LOG_DIR": str(root / "logs"), "SHARED_DATA_ROOT": str(root / "shared"),
                    "SOP_SOURCE_DIR": str(root / "input"), "SOP_SHARED_CONFIG": str(ROOT / "tests/fixtures/shared_config.py")}
+            env["PYTHONIOENCODING"] = "cp1252:strict"
+            executable = sys.executable
+            if os.name == "nt" and sys.prefix != sys.base_prefix:
+                # Launch the worker directly so its PID and lifetime match Popen.
+                env["__PYVENV_LAUNCHER__"] = sys.executable
+                executable = sys._base_executable
             with socket.socket() as probe:
                 probe.bind(("127.0.0.1", 0))
                 port = probe.getsockname()[1]
@@ -46,7 +52,7 @@ class ReleaseSmokeTest(unittest.TestCase):
                     return response.read()
 
             with (root / "launch.log").open("wb") as log:
-                proc = subprocess.Popen([sys.executable, str(release / "server.py"), "--port", str(port)],
+                proc = subprocess.Popen([executable, str(release / "server.py"), "--port", str(port)],
                                         cwd=root, env=env, stdout=log, stderr=log)
                 try:
                     for _ in range(100):
@@ -61,6 +67,8 @@ class ReleaseSmokeTest(unittest.TestCase):
                         self.fail("The packaged service did not start")
                     self.assertEqual(health["pid"], proc.pid)
                     self.assertEqual(Path(health["workspace"]), release)
+                    launch_log = (root / "launch.log").read_text(encoding="utf-8")
+                    self.assertIn("SOP管理已就绪", launch_log)
                     html = request("").decode()
                     for module in ("plan-excel.js", "option-split.js", "history.js", "app.js"):
                         self.assertIn(module, html)

@@ -13,6 +13,7 @@ import mimetypes
 import os
 import signal
 import socket
+import sys
 import threading
 import time
 import webbrowser
@@ -683,4 +684,8 @@ def main():
 
 
 if __name__ == "__main__":
+    # Redirected service logs must support Chinese on every Windows locale.
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and not stream.isatty():
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
     raise SystemExit(main())
