@@ -70,6 +70,9 @@ assert.equal(run('gridDraft'),null);assert.equal(run('brand'),'');assert.equal(r
 assert.match(nodes.get('#app').innerHTML,/筹备车型 2027款/,'The saved model is not hidden by the previous model/search filters.');
 assert.equal(run("sumPlan(products(),'2027-03','sop').value"),123);
 assert.equal(run("sumSales([state.products.find(p=>p.id==='manual-future')],'2027-03',salesIndex,true).value"),null);
+assert.doesNotMatch(html(), /data-expand="智界\|筹备车型 2027款"/, 'A model without children has no expand action.');
+assert.match(html(), /data-expand="享界\|已有车型 2026款"/);
+assert.doesNotMatch(html(), /<(?:em|small)>(?:车型计划|汇总计划|\d+(?:版本|车型|个单代际))<\//);
 assert.equal(run('state.sales.length'),0);assert.equal(run('state.model_sales.length'),0);
 assert(!requests.some(r=>r.path.includes('plan-workbook')),'Creating a future model must not require a maintenance workbook.');
 

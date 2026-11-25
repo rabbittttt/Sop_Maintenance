@@ -292,7 +292,6 @@ dialog .subtitle { margin-bottom: 23px; }
 .row-link:hover { color: var(--primary); text-decoration: underline; }
 .row-toggle { text-align: left; line-height: 1.65; }
 .row-toggle > span { width: 16px; height: 16px; border: 1px solid #c2cfe1; color: #5f789c; font-size: 13px; display: inline-grid; place-items: center; border-radius: 3px; background: white; flex: 0 0 auto; line-height: 1; }
-.row-toggle em { color: #6f8097; font-style: normal; font-size: var(--type-note); font-weight: 400; white-space: nowrap; }
 .row-toggle:not([data-expand]) { cursor: default; }
 .plan-table .missing, .missing { color: #64748b; font-weight: 400; }
 .partial { font-size: var(--type-note); color: #996d26; margin-left: 3px; }
@@ -533,7 +532,6 @@ dialog .subtitle { margin-bottom: 23px; }
   .plan-table .version-row .sticky-name { padding-left: 19px; }
   .plan-table .model-row .sticky-name { padding-left: 15px; }
   .plan-table .row-toggle { gap: 5px; }
-  .plan-table .row-toggle em { font-size: var(--type-note); }
 }
 @media print { .sidebar, .topbar, .workspace-footer, .heading-actions, .filterbar, .toast, .edit-cell svg { display: none !important; } .workspace { margin-left: 0; } #app { padding: 0; } body { background: white; } .card, .stat-card { box-shadow: none; break-inside: avoid; } .table-scroll { overflow: visible; max-height: none; } .plan-table { width: 100%; table-layout: auto; } .plan-table th, .plan-table td { min-width: auto; padding: 6px; } .plan-table .sticky-name, .plan-table .sticky-metric, .plan-table thead th { position: static; width: auto; min-width: auto; max-width: none; box-shadow: none; } }
 
@@ -631,7 +629,6 @@ dialog .subtitle { margin-bottom: 23px; }
 .annual-sheet .plan-table .plan-label { color: var(--primary-hover); }
 .annual-sheet .plan-table .row-toggle { font-size: 13px; gap: 6px; row-gap: 2px; font-weight: 600; }
 .annual-sheet .plan-table .row-toggle > span { min-width: 15px; width: 15px; height: 15px; line-height: 13px; border: 1px solid #9faab8; border-radius: 2px; background: #fff; color: #2c4a70; text-align: center; font-size: 12px; }
-.annual-sheet .plan-table .row-toggle em { color: #6c7783; font-size: var(--type-note); font-weight: 400; }
 .annual-sheet .plan-table .row-link { padding: 2px 0; color: #46556a; font-size: 12px; line-height: 1.45; text-align: left; }
 .annual-sheet .plan-table .edit-cell { padding: 3px 4px; margin: -3px -4px; min-width: 100%; min-height: 28px; border-radius: 2px; color: #174786; }
 .annual-sheet .plan-table .edit-cell:hover { background: #eceef1; border-color: var(--border-strong); }
@@ -1071,9 +1068,7 @@ body,
 .annual-sheet .plan-table .metric-label,
 .annual-sheet .plan-table .row-link { font-size: var(--type-table); }
 .brand-tab > span,
-.plan-table .row-toggle em,
 .annual-sheet .plan-table .month-tag,
-.annual-sheet .plan-table .row-toggle em,
 .plan-table .sticky-name > small,
 .table-footer,
 .rec-table small { font-size: var(--type-note); }

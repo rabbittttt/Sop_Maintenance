@@ -476,7 +476,12 @@ async function main() {
     assert.equal(await page.locator('[data-expand="享界|S9 更新 2026款"]').count(),0);
     assert.ok(state.products.filter(p=>p.model==='S9 更新 2026款').every(p=>p.active===false));
     await page.locator('#restore-hidden-row').selectOption({label:'S9 更新 2026款（已停用）'});
-    assert.equal(await page.locator('[data-expand="享界|S9 更新 2026款"]').count(),1);
+    assert.equal(await page.locator('[data-hide-level="model"][data-hide-id="享界|S9 更新 2026款"]').count(),1);
+    const restoredModelToggle=page.locator('[data-expand="享界|S9 更新 2026款"]');
+    assert.equal(await restoredModelToggle.count(),0,'All versions of the restored model are still hidden');
+    const versionKey=await page.evaluate(()=>rowViewKey('version','a'));
+    await page.locator('#restore-hidden-row').selectOption(versionKey);
+    assert.equal(await restoredModelToggle.count(),1,'Restoring a version makes the model expandable again');
     assert.equal(state.products.find(p=>p.id==='a').active,false,'Restore visibility does not reactivate a model');
     console.log('PASS: one inline editing path, whole-model rename/delete/undo, hidden members, year isolation and single-row restore.');
 
