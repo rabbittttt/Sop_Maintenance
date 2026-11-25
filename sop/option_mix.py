@@ -44,22 +44,28 @@ def _date(value):
         return value.date()
     if isinstance(value, date):
         return value
-    match = re.fullmatch(r"(20\d{2})[-/](\d{1,2})[-/](\d{1,2})", _text(value))
+    match = re.fullmatch(r"(?:20)?(\d{2})[-/](\d{1,2})[-/](\d{1,2})", _text(value))
     if match:
         try:
-            return date(*(int(part) for part in match.groups()))
+            year, month, day = map(int, match.groups())
+            return date(2000 + year, month, day)
         except ValueError:
             pass
     return None
 
 
 def _number(value):
+    if isinstance(value, str) and re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)", value.strip()):
+        value = float(value)
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
         return None
     return value
 
 
 def _share(value):
+    if isinstance(value, str) and value.rstrip().endswith(("%", "％")):
+        percent = _number(value.rstrip()[:-1])
+        return percent / 100 if percent is not None and 0 <= percent <= 100 else None
     number = _number(value)
     return float(number) if number is not None and 0 <= number <= 1 else None
 
@@ -94,7 +100,13 @@ def _source_sheet(sheet):
         if _text(cells[1].value):
             statistic = _text(cells[1].value)
         option = _text(cells[2].value)
-        if statistic not in {"占比", "数量"} or not option or option == "数量":
+        if statistic not in {"占比", "数量"} or not option:
+            continue
+        read_value = _share if statistic == "占比" else _number
+        for col, day in day_columns:
+            if col < len(cells) and read_value(cells[col].value) is not None:
+                observed_dates.add(day)
+        if option == "数量":
             continue
         slot = entries.setdefault((dimension, option), {"dimension": dimension, "option": option,
                                                          "share": None, "share_display": None,
@@ -104,7 +116,10 @@ def _source_sheet(sheet):
         value = source_cell.value if source_cell is not None else None
         if statistic == "占比":
             slot["share"] = _share(value)
-            slot["share_display"] = _share_display(slot["share"], source_cell.number_format if source_cell is not None else "")
+            if slot["share"] is not None and isinstance(value, str) and value.rstrip().endswith(("%", "％")):
+                slot["share_display"] = value.strip()
+            else:
+                slot["share_display"] = _share_display(slot["share"], source_cell.number_format if source_cell is not None else "")
             slot["source_cell"] = f"{openpyxl.utils.get_column_letter(near + 1)}{row_number}"
             if slot["share"] is None:
                 slot["source_error"] = ("近28天占比为空或公式结果未保存。" if value is None else
@@ -112,9 +127,6 @@ def _source_sheet(sheet):
         else:
             count = _number(value)
             slot["count"] = count if count is not None and count >= 0 else None
-        for col, day in day_columns:
-            if col < len(cells) and _number(cells[col].value) is not None:
-                observed_dates.add(day)
     # Quantity-only blocks are not option proportions. Counts are annotations;
     # they must never replace or recalculate the source's percentage cell.
     rows = [row for row in entries.values() if row["source_cell"] is not None]
@@ -126,7 +138,8 @@ def _source_sheet(sheet):
         row["sample_count"] = sum(counts) if counts and all(v is not None for v in counts) else None
     latest = max(observed_dates, default=None)
     coverage = sum(day >= latest - timedelta(days=WINDOW_DAYS - 1) for day in observed_dates) if latest else 0
-    return {"error": None, "rows": rows, "latest_date": latest.isoformat() if latest else None,
+    return {"error": None if rows else "“近28天”列缺少选配项的占比行。",
+            "rows": rows, "latest_date": latest.isoformat() if latest else None,
             "covered_days": coverage, "observed_dates": [day.isoformat() for day in sorted(observed_dates)]}
 
 
@@ -213,7 +226,7 @@ def read_option_mix(source_dir=None, *, published_sheets=None):
             missing_summaries.append({"generation": summary, "error": chosen[2]["error"] or "汇总代际近28天占比没有可读取数值。"})
     for generation, (_, raw_generation, sheet) in sources.items():
         if sheet["error"]:
-            issues.append({"generation": generation, "error": sheet["error"]})
+            issues.append({"generation": generation, "source_sheet": sheet["source_sheet"], "error": sheet["error"]})
             continue
         if generation in groups and any(item["generation"] == generation for item in missing_summaries):
             continue

@@ -113,6 +113,40 @@ class OptionMixTest(unittest.TestCase):
         self.assertTrue(version["source_error"])
         self.assertEqual({issue["source_cell"] for issue in result["issues"]}, {"F3", "F7"})
 
+    def test_intranet_day_headers_and_direct_percentage_column(self):
+        book = openpyxl.Workbook()
+        sheet = book.active
+        sheet.title = "智界 R7 2026款 by天"
+        sheet.append(["指标", "统计类型", "分类", "26/1/30", "26/2/25", "26/3/13", "26/5/4",
+                      "26/5/11", "26/7/9", "26/10/28", "26/10/30", "近28天", "总计"])
+        sheet.append(["交车锁单", "数量", "数量", 1, 1, 1, 1, 1, 1, "1", 1, 8, 8])
+        sheet.append(["动力", "占比", "增程", *([None] * 8), "62.50%", .75])
+        sheet.append([None, None, "纯电", *([None] * 8), .375, .25])
+        sheet["L4"].number_format = "0.0%"
+        book.save(self.path)
+        book.close()
+
+        result = read_option_mix(self.root)
+        self.assertEqual((result["latest_date"], result["covered_days"]), ("2026-10-30", 2))
+        self.assertEqual([(row["option"], row["share"], row["share_display"], row["source_cell"])
+                          for row in result["rows"]], [("增程", .625, "62.50%", "L3"), ("纯电", .375, "37.5%", "L4")])
+        self.assertEqual(result["rows"][0]["source_sheet"], "智界 R7 2026款 by天")
+        self.assertEqual(result["rows"][0]["generation"], "智界 R7 2026款")
+
+    def test_quantity_only_sheet_identifies_missing_share_rows(self):
+        book = openpyxl.Workbook()
+        sheet = book.active
+        sheet.title = "智界 R7 2026款by天"
+        sheet.append(["指标", "统计类型", "分类", "26/10/30", "近28天", "总计"])
+        sheet.append(["交车锁单", "数量", "数量", 1, 8, 8])
+        book.save(self.path)
+        book.close()
+
+        result = read_option_mix(self.root)
+        self.assertEqual(result["rows"], [])
+        self.assertEqual(result["issues"][0]["source_sheet"], sheet.title)
+        self.assertIn("缺少选配项的占比行", result["issues"][0]["error"])
+
 
 if __name__ == "__main__":
     unittest.main()

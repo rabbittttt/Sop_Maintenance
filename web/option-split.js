@@ -12,8 +12,9 @@ function optionProductGroups() {
   }
   return [...groups.values()].sort((a,b)=>compareBrands(a.brand,b.brand)||a.model.localeCompare(b.model,'zh-CN'));
 }
-function optionMemberGroups(parent) {
-  const generation=optionGeneration(parent),groups=new Map();
+function optionMemberGroups(parent,sourceFor) {
+  const groups=new Map(),generation=optionGeneration(parent,sourceFor);
+  if(!generation)return [];
   for(const product of memberData().products||[]) {
     if(product.parent_generation!==generation)continue;
     const id=modelGroupKey(product);
@@ -26,22 +27,47 @@ function optionPlanQuantity(group,month) {
   if(group.parent&&group.parent.products.some(p=>isModelPlan(p)&&planIndex.get(key(p.id,month))?.sop!=null))return null;
   return sumPlan(group.products,month,'sop').value;
 }
-function optionGeneration(group) {
+// Match the source reader's NFKC, whitespace and explicit BETA aliases.
+function optionGenerationKey(value) {
+  return String(value||'').normalize('NFKC')
+    .replace(/(20\d{2}款)\s*BETA(?=$|[\s_\-–—]|汇总$)/gi,'$1')
+    .replace(/[\s_\-–—]*[(\[{]\s*BETA\s*[)\]}][\s_\-–—]*/gi,' ')
+    .replace(/(^|[\s_\-–—])BETA(?=$|[\s_\-–—])[\s_\-–—]*/gi,' ')
+    .trim().replace(/\s+/g,' ');
+}
+function optionSourceIndex() {
+  const exact=new Map(),aliases=new Map();
+  function entry(row) {
+    if(!exact.has(row.generation)) {
+      const source={generation:row.generation,groups:new Map()};
+      const alias=row.normalized_generation||optionGenerationKey(row.generation);
+      exact.set(row.generation,source);
+      aliases.set(alias,aliases.has(alias)?null:source);
+    }
+    return exact.get(row.generation);
+  }
+  for(const row of optionMix?.rows||[]) {
+    const {groups}=entry(row);
+    if(row.is_vehicle_option!==true)continue;
+    if(!groups.has(row.dimension))groups.set(row.dimension,[]);
+    groups.get(row.dimension).push(row);
+  }
+  for(const issue of [...(optionMix?.missing_summaries||[]),...(optionMix?.issues||[])]) {
+    if(!issue.source_cell)entry(issue).error=issue.source_sheet?`${issue.source_sheet} · ${issue.error}`:issue.error;
+  }
+  return name=>exact.get(name)||aliases.get(optionGenerationKey(name));
+}
+function optionGeneration(group,sourceFor) {
   const summaries=[...new Set(group.products.map(p=>p.summary_generation).filter(Boolean))];
   if(summaries.length)return summaries.length===1?summaries[0]:'';
   const generations=[...new Set(group.products.flatMap(productGenerations).filter(Boolean))];
   if(generations.length===1)return generations[0];
-  const inferred=`${group.brand} ${group.model}`;
-  return generations.length?'' : (optionMix?.rows||[]).some(row=>row.generation===inferred)?inferred:'';
-}
-function optionSourceGroups(generation) {
-  const groups=new Map();
-  for(const row of optionMix?.rows||[]) {
-    if(row.generation!==generation||row.is_vehicle_option!==true)continue;
-    if(!groups.has(row.dimension))groups.set(row.dimension,[]);
-    groups.get(row.dimension).push(row);
+  if(generations.length) {
+    const matches=new Set(generations.map(sourceFor));
+    return matches.size===1?([...matches][0]?.generation||''):'';
   }
-  return groups;
+  const inferred=`${group.brand} ${group.model}`;
+  return sourceFor(inferred)?inferred:'';
 }
 function optionNameKey(value) { return String(value||'').replace(/^\s*\d{4}款\s*/i,'').replace(/[\s·・]/g,'').toLowerCase(); }
 function optionShareDisplay(item) { return item.share_display??(item.share==null?'':`${(item.share*100).toFixed(2)}%`); }
@@ -116,17 +142,18 @@ function optionPageRender() {
   const headers=visible.map(month=>`<th scope="col" class="${month<state.current_month?'past-month':''}">${shortMonth(month)}</th>${rolling&&month.endsWith('-12')?yearCell(month.slice(0,4)):''}`).join('')+(rolling?'':`<th scope="col" class="annual-total">${optionYear}总计</th>`);
   const yearPlan=(group,year)=>{const values=yearMonths(year).map(month=>optionPlanQuantity(group,month)).filter(v=>v!=null);return values.length?fmt(values.reduce((sum,v)=>sum+v,0)):'';};
   const planCells=group=>visible.map(month=>`<td class="number${month<state.current_month?' past-month':''}">${fmt(optionPlanQuantity(group,month))}</td>${rolling&&month.endsWith('-12')?`<td class="number annual-total">${yearPlan(group,month.slice(0,4))}</td>`:''}`).join('')+(rolling?'':`<td class="number annual-total">${yearPlan(group,optionYear)}</td>`);
-  const unavailable=new Map((optionMix?.missing_summaries||[]).map(entry=>[entry.generation,entry.error]));
+  const sourceFor=optionSourceIndex();
   const fullColumns=visible.length+2+(rolling?visible.filter(month=>month.endsWith('-12')).length:1);
   const renderGroup=(group,member=false)=>{
-    const generation=optionGeneration(group),dimensionGroups=optionSourceGroups(generation),name=member?generation:`${group.brand} · ${group.model}`;
-    const children=member?[]:optionMemberGroups(group);
-    const source=dimensionGroups.values().next().value?.[0];
+    const generation=optionGeneration(group,sourceFor),sourceEntry=sourceFor(generation);
+    const dimensionGroups=sourceEntry?.groups,name=member?generation:`${group.brand} · ${group.model}`;
+    const children=member?[]:optionMemberGroups(group,sourceFor);
+    const source=dimensionGroups?.values().next().value?.[0];
     const sourceMeta=source?.latest_date?`<small class="option-sample">${esc(source.latest_date)} · ${Number(source.covered_days)||0}/28天</small>`:'';
     const expand=children.length?`<button type="button" class="option-expand" data-option-expand="${esc(group.id)}" aria-label="${optionExpanded.has(group.id)?'收起':'展开'}${esc(name)}的单代际" aria-expanded="${optionExpanded.has(group.id)}">${optionExpanded.has(group.id)?'−':'+'}</button>`:'';
     let html=`<tr class="option-model-row${member?' option-member-row':''}" data-option-generation="${esc(generation)}"><th scope="row" class="option-name">${expand}${esc(name)}${sourceMeta}</th><td class="option-share">SOP计划量</td>${planCells(group)}</tr>`;
-    if(!generation||!dimensionGroups.size) {
-      const reason=unavailable.has(generation)?`${generation}：${unavailable.get(generation)}`:`原表缺少“${generation||name}”的直接近28天选配比例`;
+    if(!generation||!dimensionGroups?.size) {
+      const reason=sourceEntry?.error?`${generation}：${sourceEntry.error}`:`原表缺少“${generation||name}”的直接近28天选配比例`;
       const manual=(!optionDimension||optionDimension==='版本')?optionManualVersionRows(group,generation,[],visible,rolling):'';
       return html+`<tr class="option-source-error" data-option-generation="${esc(generation)}"><td colspan="${fullColumns}">${esc(reason)}</td></tr>`+(manual?`<tr class="option-dimension-row" data-option-dimension="版本"><th scope="row" class="option-name">版本</th><td class="option-share"></td><td colspan="${fullColumns-2}"></td></tr>${manual}`:'');
     }
@@ -138,8 +165,11 @@ function optionPageRender() {
       const manual=dimension==='版本'&&monthResults.some(result=>result.manual);
       const overridden=dimension==='版本'&&visible.some(month=>group.products.some(p=>!isModelPlan(p)&&!p.read_only&&planValue(p,month,'sop')!=null)&&group.products.some(p=>isModelPlan(p)&&planValue(p,month,'sop')!=null));
       html+=`<tr class="option-dimension-row${member?' option-member-row':''}" data-option-generation="${esc(generation)}" data-option-dimension="${esc(dimension)}"><th scope="row" class="option-name">${esc(dimension)}${manual?'<small>已维护版本计划</small>':overridden?'<small>车型量优先</small>':''}</th><td class="option-share"></td><td colspan="${fullColumns-2}">${issue?`<span class="option-source-error">${esc(issue)}</span>`:''}</td></tr>`;
-      if(!issue)items.forEach((item,index)=>{
-        const itemCells=visible.map((month,mIndex)=>`<td class="number${month<state.current_month?' past-month':''}"${monthResults[mIndex].manual?' title="已维护版本计划"':''}>${monthResults[mIndex].values[index]==null?'':fmt(monthResults[mIndex].values[index])}</td>${rolling&&month.endsWith('-12')?`<td class="number annual-total">${optionAnnual(group,dimension,items,month.slice(0,4),index)}</td>`:''}`).join('');
+      items.forEach((item,index)=>{
+        const itemCells=visible.map((month,mIndex)=>{
+          const {values,manual}=monthResults[mIndex],value=values?.[index];
+          return `<td class="number${month<state.current_month?' past-month':''}"${manual?' title="已维护版本计划"':''}>${value==null?'':fmt(value)}</td>${rolling&&month.endsWith('-12')?`<td class="number annual-total">${optionAnnual(group,dimension,items,month.slice(0,4),index)}</td>`:''}`;
+        }).join('');
         const annual=rolling?'':`<td class="number annual-total">${optionAnnual(group,dimension,items,optionYear,index)}</td>`;
         const sourceCell=`${item.source_sheet||`${item.source_generation||generation}by天`}!${item.source_cell||''}`;
         const share=optionShareDisplay(item);
@@ -153,7 +183,7 @@ function optionPageRender() {
     }
     return html;
   };
-  const rows=selected.map(group=>renderGroup(group)+(optionExpanded.has(group.id)?optionMemberGroups(group).map(child=>renderGroup(child,true)).join(''):'')).join('');
+  const rows=selected.map(group=>renderGroup(group)+(optionExpanded.has(group.id)?optionMemberGroups(group,sourceFor).map(child=>renderGroup(child,true)).join(''):'')).join('');
   const status=optionMix?.latest_date?`选配截至 <strong>${esc(optionMix.latest_date)}</strong> · 近28天覆盖 <strong>${Number(optionMix.covered_days)||0}/28天</strong>`:'选配数据待更新';
   const freshness=optionMix?.status==='stale'||optionMix?.error?`<span class="option-source-error" title="${esc(optionMix.error||'选配来源待刷新')}">选配来源待刷新</span>`:'';
   const unclassified=optionMix?.unclassified_dimensions?.length??[...new Set((optionMix?.rows||[]).filter(row=>row.is_vehicle_option==null).map(row=>row.dimension))].length;

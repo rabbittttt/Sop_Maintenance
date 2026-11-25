@@ -44,7 +44,7 @@ assert.match(app.innerHTML,/享界 X4 2026款汇总缺少直接来源/);
 assert.doesNotMatch(app.innerHTML,/data-option-generation="享界 X4 2026款汇总"[^]*?data-option-name="银"/,'Member ratios must not stand in for a missing summary source.');
 assert.match(app.innerHTML,/data-option-manual="true"[^]*?新版本/,'A manual version absent from the source remains visible.');
 assert.match(app.innerHTML,/原表无比例/);
-assert.equal(run("optionAllocation(optionProductGroups()[0],'外观',optionSourceGroups('智界 R7 2026款').get('外观'),'2026-12').values[0]"),4);
+assert.equal(run("optionAllocation(optionProductGroups()[0],'外观',optionSourceIndex()('智界 R7 2026款').groups.get('外观'),'2026-12').values[0]"),4);
 run("optionRange='annual';optionYear='2026';optionPageRender()");
 assert.match(row('智界 R7 2026款','外观','红'),/annual-total">64<\/td>/,'Annual option quantities sum all 12 months.');
 run("optionExpanded.add(optionProductGroups()[1].id);optionRange='rolling';optionPageRender()");
@@ -60,3 +60,27 @@ assert.equal(run("optionAllocation(largeGroup,'外观',nearHundred,'2026-12').va
   'Source display rounding may total 99.99%; integer apportionment must still conserve a large plan.');
 assert.match(run("optionAllocation(largeGroup,'外观',[{option:'甲',share:.6},{option:'乙',share:.2}],'2026-12').error"),/比例合计/,
   'A material source gap must not be normalized away.');
+
+run(`state.products.filter(p=>p.brand==='智界').forEach(p=>p.source_generations=['智界 R7 2026款 ']);
+  optionPageRender()`);
+assert.match(row('智界 R7 2026款 ','外观','红'),/60\.00%/,'A trailing space in the intranet catalog must match the source generation.');
+run(`state.products[0].source_generations.push('智界 R7 2026款');
+  optionPageRender()`);
+assert.match(row('智界 R7 2026款','外观','红'),/60\.00%/,'Multiple catalog spellings can resolve to the same source.');
+assert.equal(run("optionSourceIndex()('智界　Ｒ７ 2026款（BETA）').generation"),'智界 R7 2026款');
+assert.equal(run("optionSourceIndex()('智界 R7 2025款')"),undefined);
+
+run(`optionMix.rows.push({...optionMix.rows[0],generation:'智界 Ｒ７ 2026款',option:'另表红'});
+  var sourceFor=optionSourceIndex()`);
+assert.equal(run("sourceFor('智界　R7 2026款 ')"),null,'Ambiguous aliases must not mix two sheets.');
+assert.equal(run("sourceFor('智界 R7 2026款').groups.get('外观').length"),2,'The exact sheet has priority.');
+run(`optionMix.rows.pop();
+  optionMix.rows[1].share=null;optionMix.rows[1].share_display=null;
+  optionRange='annual';optionPageRender()`);
+assert.match(row('智界 R7 2026款','外观','红'),/60\.00%/,'A bad sibling share must not hide the original proportions.');
+assert.doesNotMatch(row('智界 R7 2026款','外观','红'),/<td class="number[^"]*">[\d,]+</);
+assert.match(app.innerHTML,/原表比例存在空白或无效值/);
+run(`optionMix.rows=optionMix.rows.filter(row=>row.generation!=='智界 R7 2026款');
+  optionMix.issues=[{generation:'智界 R7 2026款',error:'缺少唯一的“近28天”列。',source_sheet:'智界 R7 2026款by天'}];
+  optionPageRender()`);
+assert.match(app.innerHTML,/智界 R7 2026款by天 · 缺少唯一的“近28天”列。/);
