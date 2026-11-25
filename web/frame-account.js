@@ -1,3 +1,7 @@
+if (window.frameElement?.matches('#frame-container > iframe[data-app="sop"]')) {
+  document.documentElement.classList.add('planhub-embedded');
+}
+
 // Install before the deferred application starts so iframe load messages are retained.
 window.sopFrameAccount = (() => {
   if (window.parent === window) return null;
