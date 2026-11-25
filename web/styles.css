@@ -938,7 +938,13 @@ input[aria-readonly="true"]{background:#f1f4f8;color:#4c5e73}
 .grid-toolbar #grid-committee-period { width:145px; }
 .annual-sheet .plan-table .committee-row .sticky-metric { font-size:var(--type-note); font-weight:500; color:var(--muted); }
 .annual-sheet .plan-table tbody .committee-row td.number { font-size:13px; font-weight:500; }
-.option-controls .annual-toolbar { border-bottom:0; }
+.option-controls .annual-toolbar, .matching-controls .annual-toolbar { border-bottom:0; }
+.matching-controls input[type="month"] { min-height:32px; font-size:13px; }
+@media (max-width:600px) {
+  .matching-controls .annual-filters { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; }
+  .matching-controls .field.inline-field { flex-direction:column; align-items:stretch; gap:4px; }
+  .matching-controls .field :is(input,select) { width:100%; min-width:0; max-width:100%; }
+}
 .option-controls .sheet-meta { display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; margin:0; padding:2px 0 8px; color:var(--muted); font-size:12px; }
 .option-sheet .table-scroll { max-height:calc(100dvh - 245px); }
 .option-table { --option-name-width:220px; border-collapse:separate; border-spacing:0; width:max-content; min-width:100%; font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; }

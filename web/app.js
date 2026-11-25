@@ -774,11 +774,6 @@ function pageHeading(name=page) {
   return `<h1 class="visually-hidden${name==='planning'?' plan-title':''}">${titles[name]}</h1>`;
 }
 function button(text,action,cls='secondary',extra='') { if (writeActions.has(action)&&!access.canWrite) extra+=' disabled title="'+esc(readOnlyMessage)+'"'; return `<button type="button" class="button ${cls}" data-action="${action}" ${extra}>${text}</button>`; }
-function brandTabs() { return `<div class="brand-tabs" role="group" aria-label="品牌筛选">${['',...brands].map(b=>`<button class="brand-tab ${b===brand?'active':''}" data-brand="${b}" aria-pressed="${b===brand}">${b||'全部品牌'}<span>${state.products.filter(p=>!b||p.brand===b).length}</span></button>`).join('')}</div>`; }
-function filterBar(extra='') {
-  const ms=[...new Set(state.products.filter(p=>!brand||p.brand===brand).map(p=>p.model))];
-  return `<div class="filterbar"><label class="field">车型<select id="model-filter">${opt('','全部车型',model)}${ms.map(m=>opt(m,m,model)).join('')}</select></label>${page==='matching'?'':`<label class="field search-field">搜索版本<input id="version-search" placeholder="输入车型或版本名称" value="${esc(query)}"></label>`}${extra}</div>`;
-}
 function selectedPanel(ps) {
   const picked=selected?ps.filter(p=>p.id===selected):ps;
   const dates=[...historyMonths(),state.current_month], aggregate=dates.map(m=>sumSales(picked,m)),totals=aggregate.map(q=>q.value);
@@ -1121,8 +1116,21 @@ async function matchingPage() {
   }
   if(request!==activeRequest||page!=='matching')return;
   const ps=products();
+  const models=[...new Set(state.products.filter(p=>!brand||p.brand===brand).map(p=>p.model))];
+  const brandOptions=['',...visibleBrands()].map(name=>{
+    const count=name?state.products.filter(p=>p.brand===name).length:state.products.length;
+    return opt(name,`${name||'全部品牌'}（${count}）`,brand);
+  }).join('');
   $('#app').innerHTML=pageHeading('matching')+
-    brandTabs()+filterBar(`<label class="field">考核月份<input id="match-month" type="month" value="${matchMonth}"></label><label class="field">考核版本<select id="match-product">${opt('','当前范围合计',matchProduct)}${ps.map(p=>opt(p.id,`${p.model} · ${p.version}`,matchProduct)).join('')}</select></label><div class="toolbar">${button('维护发货实绩','edit-shipments','primary')}</div>`)+
+    `<div class="plan-controls matching-controls"><div class="annual-toolbar">
+      <div class="annual-filters">
+        <label class="field inline-field">品牌<select id="brand-filter">${brandOptions}</select></label>
+        <label class="field inline-field">车型<select id="model-filter">${opt('','全部车型',model)}${models.map(m=>opt(m,m,model)).join('')}</select></label>
+        <label class="field inline-field">考核月份<input id="match-month" type="month" value="${esc(matchMonth)}"></label>
+        <label class="field inline-field">考核版本<select id="match-product">${opt('','当前范围合计',matchProduct)}${ps.map(p=>opt(p.id,`${p.model} · ${p.version}`,matchProduct)).join('')}</select></label>
+      </div>
+      <div class="toolbar plan-actions">${button('维护发货实绩','edit-shipments','primary')}</div>
+    </div></div>`+
     `<div class="stats"><div class="stat-card"><div class="stat-label">综合匹配率 P${planToolIcon('target')}</div><div class="stat-number">${pct(d.score)}</div><div class="stat-foot">${esc(statusText(d.status)||'待数据齐全')}</div></div><div class="stat-card"><div class="stat-label">考核月实际发货量 Y${planToolIcon('shipment')}</div><div class="stat-number">${fmt(d.actual)}<span class="unit">辆</span></div><div class="stat-foot">${esc(statusText(d.actual_status)||'待维护')} · 来源SP / IoC</div></div><div class="stat-card"><div class="stat-label">计划周次完整度${planToolIcon('weeks')}</div><div class="stat-number">${d.complete_weeks??0}<span class="unit">/ 14</span></div></div><div class="stat-card"><div class="stat-label">提前0周 · 业务日期${planToolIcon('calendar')}</div><div class="stat-number date-number">${esc(d.zero_week||'—')}</div><div class="stat-foot">周日24:00 · 北京时间</div></div></div>`+
     `<section class="card"><div class="panel-head"><div><h2>14周计划与发货对照</h2><p>${shortMonth(matchMonth)} · 全月计划</p></div><div class="legend"><span><i class="legend-square sop"></i>历史SOP计划</span><span><i class="legend-line"></i>实际发货</span></div></div><div class="match-chart" tabindex="0" role="region" aria-label="14周计划与发货对照，可横向滚动">${matchingChart(d)}</div></section>`+
     `<section class="card page-section"><div class="panel-head"><div><h2>匹配率计算明细</h2><p>Pi = min(Y, Mi) ÷ max(Y, Mi) × 100%</p></div>${button('导出考核明细','export-match')}</div><div class="table-scroll"><table class="detail-table"><thead><tr><th>提前周次</th><th>规定取数日（24点）</th><th>采用快照</th><th>SOP计划 Mi</th><th>实际发货 Y</th><th>单周匹配率</th><th>权重</th><th>加权贡献</th><th>状态</th></tr></thead><tbody>${d.rows.map(r=>`<tr><td><span class="week-label">W${r.week}</span></td><td>${r.business_date}</td><td>${r.snapshot_id?`<button class="text-button" data-match-snapshot="${esc(r.snapshot_id)}">查看快照</button>`:'—'}</td><td>${fmt(r.plan)}</td><td>${fmt(r.actual)}</td><td>${pct(r.match)}</td><td>${fmt(r.weight*100)}%</td><td>${r.contribution==null?'—':Number(r.contribution).toFixed(2)+' pp'}</td><td><span class="badge ${r.match!=null?'good':'warn'}">${esc(statusText(r.status))}</span></td></tr>`).join('')}</tbody></table></div><div class="table-footer">W13–W9：每周2%　·　W8–W5：每周7.5%　·　W4–W1：每周10%　·　W0：20%</div></section>`;
@@ -1275,7 +1283,6 @@ document.addEventListener('click',async e=>{
     if(el.dataset.catalogBind){requireWrite();bindProductSource(el.dataset.catalogBind);return;}
     if(el.dataset.catalogEdit){requireWrite();editProduct(el.dataset.catalogEdit);return;}
     if(el.dataset.page){page=el.dataset.page;if(page==='matching')query='';if(page==='option-split'){optionRequestId++;optionMix=null;optionMixError='';}await renderPage();return;}
-    if('brand' in el.dataset){brand=el.dataset.brand;model='';matchProduct='';query='';selected=null;await renderPage();return;}
     if(el.dataset.range){range=el.dataset.range;planning();return;}
     if(el.dataset.edit){requireWrite();await editInGrid(el.dataset.edit,el.dataset.month);return;}
     if(el.dataset.detail){await showDetail(el.dataset.detail);return;}
@@ -1352,7 +1359,7 @@ document.addEventListener('change',async e=>{
     if(e.target.id==='option-dimension'){optionDimension=e.target.value;optionPageRender();return;}
     if(e.target.id==='range-filter'){range=e.target.value==='annual'?'annual':'rolling';planning();}
     if(e.target.id==='year-filter'){selectPlanYear(e.target.value);planning();}
-    if(e.target.id==='brand-filter'){brand=e.target.value;model='';matchProduct='';query='';selected=null;planning();}
+    if(e.target.id==='brand-filter'){brand=e.target.value;model='';matchProduct='';query='';selected=null;await renderPage();}
     if(e.target.id==='model-filter'){model=e.target.value;selected=null;matchProduct='';await renderPage();}
     if(e.target.id==='history-range'){historyRange=e.target.value;planning();}
     if(e.target.id==='metric-filter'){metric=e.target.value;planning();}
