@@ -77,7 +77,7 @@ strong { font-weight: 650; }
 .nav-item { position: relative; display: flex; align-items: center; gap: 12px; min-height: 46px; width: 100%; padding: 11px 14px; border: 0; border-radius: 7px; background: transparent; color: #b7c6dc; text-align: left; font-size: 13px; }
 .nav-item svg { width: 18px; height: 18px; opacity: .87; }
 .nav-item:hover { color: white; background: #203756; }
-.nav-item.active { background: #285bba; color: white; box-shadow: 0 4px 12px #061b3e24; font-weight: 600; }
+.nav-item.active { background: #285bba; color: white; box-shadow: 0 4px 12px #061b3e24; }
 .nav-active-dot { display: none; width: 5px; height: 5px; margin-left: auto; background: #aacbff; border-radius: 50%; }
 .nav-item.active .nav-active-dot { display: block; }
 .sidebar-bottom { margin-top: auto; padding: 24px; }
@@ -547,7 +547,7 @@ dialog .subtitle { margin-bottom: 23px; }
 .top-nav { display:flex; align-items:center; gap:4px; min-width:0; }
 .top-nav .nav-item { justify-content:center; width:auto; min-height:40px; padding:0 12px; gap:7px; border-radius:10px; color:var(--muted); background:transparent; font-size:13px; white-space:nowrap; }
 .top-nav .nav-item:hover { background:var(--surface-soft); color:var(--primary-hover); }
-.top-nav .nav-item.active { color:var(--primary-hover); background:var(--blue-soft); box-shadow:none; font-weight:650; }
+.top-nav .nav-item.active { color:var(--primary-hover); background:var(--blue-soft); box-shadow:none; }
 .header-actions { display:flex; align-items:center; gap:4px; margin-left:auto; min-width:0; white-space:nowrap; }
 .header-actions .button { max-width:140px; overflow:hidden; text-overflow:ellipsis; }
 .header-actions .button::before { content:''; width:16px; height:16px; flex:0 0 16px; background:center/contain no-repeat; }
@@ -1099,7 +1099,7 @@ body,
   background: transparent;
   color: var(--muted);
   font-size: var(--type-body);
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1.4;
   text-decoration: none;
   white-space: nowrap;
@@ -1107,7 +1107,7 @@ body,
   transition: color 160ms, background-color 160ms;
 }
 .top-nav .nav-item:not(:disabled):hover { background: var(--bg); color: var(--navy); }
-.top-nav .nav-item.active:not(:disabled) { background: var(--blue-soft); color: var(--primary-hover); font-weight: 600; }
+.top-nav .nav-item.active:not(:disabled) { background: var(--blue-soft); color: var(--primary-hover); }
 .top-nav .nav-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .top-nav .nav-item svg { width: 18px; height: 18px; flex: 0 0 18px; color: inherit; opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
