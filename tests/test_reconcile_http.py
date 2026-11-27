@@ -106,6 +106,20 @@ class ReconcileHTTPTest(unittest.TestCase):
             self.api(http, path + "/records", {"revision": detail["revision"],
                 "changes": [{"id": record["id"], "status": "confirmed"}]}, expected=400)
 
+    def test_shared_choices_ignore_campaign_workbook(self):
+        for directory in (self.orders, self.docs):
+            (directory / "小订及首销数据整理.XLSX").write_bytes(b"legacy")
+        for directory, name in ((self.orders, "锁单报表.xlsx"), (self.docs, "首销对账补充.xlsx")):
+            (directory / name).write_bytes(b"evidence")
+        with self.running() as (http, _):
+            def choices():
+                return {item["name"] for item in self.api(http, "/shared")["files"]}
+            expected = {"锁单报表.xlsx", "首销对账补充.xlsx"}
+            self.assertEqual(choices(), expected)
+            for directory in (self.orders, self.docs):
+                (directory / "小订及首销数据整理.XLSX").unlink()
+            self.assertEqual(choices(), expected)
+
     def test_round_reuses_sop_shows_conflict_exports_and_persists(self):
         with self.running() as (http, store):
             def save_plan(quantity, revision):

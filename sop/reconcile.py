@@ -21,6 +21,7 @@ from .store import ConflictError, ValidationError, month_range, stamp, text_fiel
 MAX_FILE_BYTES = 15 * 1024 * 1024
 MAX_IMPORT_BYTES = 26 * 1024 * 1024
 MAX_RECORDS = 10000
+EXCLUDED_SHARED_WORKBOOKS = {PLAN_WORKBOOK_NAME.casefold(), "小订及首销数据整理.xlsx"}
 SHEET_TYPES = {".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                ".xls": "application/vnd.ms-excel", ".csv": "text/csv; charset=utf-8"}
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
@@ -211,7 +212,7 @@ class Reconciliation:
                 continue
             for path in sorted(root.iterdir()):
                 name = path.name
-                if (name.startswith(("~$", ".")) or name.casefold() == PLAN_WORKBOOK_NAME.casefold()
+                if (name.startswith(("~$", ".")) or name.casefold() in EXCLUDED_SHARED_WORKBOOKS
                         or name.lower().endswith(".pending.xlsx") or path.suffix.lower() not in SHEET_TYPES
                         or path.is_symlink() or not path.is_file() or path.resolve().parent != root):
                     continue
