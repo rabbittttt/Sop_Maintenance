@@ -519,9 +519,15 @@ async function main() {
     assert.equal(await page.locator('[data-hide-level="model"][data-hide-id="享界|S9 更新 2026款"]').count(),1);
     const restoredModelToggle=page.locator('[data-expand="享界|S9 更新 2026款"]');
     assert.equal(await restoredModelToggle.count(),0,'All versions of the restored model are still hidden');
+    const modelTypography=()=>page.locator('[data-hide-id="享界|S9 更新 2026款"]').locator('..').locator('.model-name > span').evaluate(label=>{
+      const style=getComputedStyle(label);
+      return [label.getBoundingClientRect().left,style.fontFamily,style.fontSize,style.fontWeight,style.lineHeight];
+    });
+    const leafStyle=await modelTypography();
     const versionKey=await page.evaluate(()=>rowViewKey('version','a'));
     await page.locator('#restore-hidden-row').selectOption(versionKey);
     assert.equal(await restoredModelToggle.count(),1,'Restoring a version makes the model expandable again');
+    assert.deepEqual(await modelTypography(),leafStyle,'Adding a disclosure preserves text alignment and typography');
     assert.equal(state.products.find(p=>p.id==='a').active,false,'Restore visibility does not reactivate a model');
     console.log('PASS: one inline editing path, whole-model rename/delete/undo, hidden members, year isolation and single-row restore.');
 

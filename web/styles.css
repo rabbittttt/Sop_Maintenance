@@ -186,8 +186,6 @@ textarea { resize: vertical; min-height: 90px; }
 .edit-cell { display: inline-flex; justify-content: flex-end; align-items: center; gap: 5px; border: 1px solid transparent; background: transparent; color: var(--primary); border-radius: 4px; padding: 4px 7px; margin: -4px -7px; min-width: 54px; min-height: 29px; font: inherit; font-variant-numeric: tabular-nums; }
 .edit-cell:hover { background: #edf3ff; border-color: #bfd3f8; }
 .edit-cell svg { width: 11px; height: 11px; color: #7f9ace; }
-.row-toggle { display: inline-flex; gap: 8px; align-items: center; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; }
-.row-toggle svg { width: 12px; height: 12px; }
 .table-foot { display: flex; gap: 15px; align-items: center; justify-content: space-between; padding: 13px 20px; border-top: 1px solid var(--border); font-size: var(--type-note); color: var(--muted); }
 .two-col { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 20px; }
 .empty-state { padding: 46px 24px; text-align: center; color: var(--muted); }
@@ -290,9 +288,6 @@ dialog .subtitle { margin-bottom: 23px; }
 .plan-table .version-row .sticky-name { padding-left: 34px; }
 .row-link { border: 0; padding: 2px 0; background: transparent; color: #365b91; font-size: 12px; line-height: 1.65; text-align: left; overflow-wrap: anywhere; }
 .row-link:hover { color: var(--primary); text-decoration: underline; }
-.row-toggle { text-align: left; line-height: 1.65; }
-.row-toggle > span { width: 16px; height: 16px; border: 1px solid #c2cfe1; color: #5f789c; font-size: 13px; display: inline-grid; place-items: center; border-radius: 3px; background: white; flex: 0 0 auto; line-height: 1; }
-.row-toggle:not([data-expand]) { cursor: default; }
 .plan-table .missing, .missing { color: #64748b; font-weight: 400; }
 .partial { font-size: var(--type-note); color: #996d26; margin-left: 3px; }
 .month-tag { display: inline-block; padding: 1px 5px; margin-left: 3px; color: var(--primary); background: #e5edff; border-radius: 3px; font-size: var(--type-note); }
@@ -511,7 +506,6 @@ dialog .subtitle { margin-bottom: 23px; }
 .plan-table tbody .total-row:hover > th,
 .plan-table tbody .total-row:hover > td { background: #e1ebfc; }
 .plan-table .row-link { display: inline-block; max-width: 100%; padding: 3px 0; }
-.plan-table .row-toggle { max-width: 100%; flex-wrap: wrap; row-gap: 4px; }
 .plan-table .row-link:focus-visible,
 .plan-table .row-toggle:focus-visible,
 .plan-table .edit-cell:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 3px; }
@@ -531,7 +525,6 @@ dialog .subtitle { margin-bottom: 23px; }
   .plan-table .metric-label { gap: 5px; }
   .plan-table .version-row .sticky-name { padding-left: 19px; }
   .plan-table .model-row .sticky-name { padding-left: 15px; }
-  .plan-table .row-toggle { gap: 5px; }
 }
 @media print { .sidebar, .topbar, .workspace-footer, .heading-actions, .filterbar, .toast, .edit-cell svg { display: none !important; } .workspace { margin-left: 0; } #app { padding: 0; } body { background: white; } .card, .stat-card { box-shadow: none; break-inside: avoid; } .table-scroll { overflow: visible; max-height: none; } .plan-table { width: 100%; table-layout: auto; } .plan-table th, .plan-table td { min-width: auto; padding: 6px; } .plan-table .sticky-name, .plan-table .sticky-metric, .plan-table thead th { position: static; width: auto; min-width: auto; max-width: none; box-shadow: none; } }
 
@@ -627,8 +620,6 @@ dialog .subtitle { margin-bottom: 23px; }
 .annual-sheet .plan-table .sticky-name small { margin-left: 6px; color: #66717e; font-weight: 400; white-space: nowrap; }
 .annual-sheet .plan-table .metric-label { color: #536071; font-size: 12px; gap: 0; font-weight: 400; }
 .annual-sheet .plan-table .plan-label { color: var(--primary-hover); }
-.annual-sheet .plan-table .row-toggle { font-size: 13px; gap: 6px; row-gap: 2px; font-weight: 600; }
-.annual-sheet .plan-table .row-toggle > span { min-width: 15px; width: 15px; height: 15px; line-height: 13px; border: 1px solid #9faab8; border-radius: 2px; background: #fff; color: #2c4a70; text-align: center; font-size: 12px; }
 .annual-sheet .plan-table .row-link { padding: 2px 0; color: #46556a; font-size: 12px; line-height: 1.45; text-align: left; }
 .annual-sheet .plan-table .edit-cell { padding: 3px 4px; margin: -3px -4px; min-width: 100%; min-height: 28px; border-radius: 2px; color: #174786; }
 .annual-sheet .plan-table .edit-cell:hover { background: #eceef1; border-color: var(--border-strong); }
@@ -805,7 +796,6 @@ dialog.export-dialog { width: min(720px, calc(100vw - 32px)); padding: 24px; }
 .annual-sheet .plan-table tbody tr > th,.annual-sheet .plan-table tbody tr > td { padding-top:2px; padding-bottom:2px; }
 .annual-sheet .plan-table td.sticky-metric { padding:3px 5px; }
 .annual-sheet .plan-table .edit-cell { min-height:24px; padding:2px 3px; margin:-2px -3px; }
-.annual-sheet .plan-table .row-toggle { gap:4px; }
 .grid-row-labels input { height:27px; }
 .grid-row-labels.model-labels { grid-template-columns:60px 1fr; }
 .grid-row-labels.model-labels label { grid-column:auto; }
@@ -927,7 +917,6 @@ input[aria-readonly="true"]{background:#f1f4f8;color:#4c5e73}
 /* Nested generations remain part of the same compact planning table. */
 .generation-member-row .sticky-name{padding-left:30px;background:#f4f7fb}
 .generation-member-row.version-row .sticky-name{padding-left:48px;background:#fafbfd}
-.generation-member-row .row-toggle{font-size:12px;font-weight:600}
 
 .committee-options { min-width:0; margin:8px 0 0; padding:6px 8px 8px; border:1px solid var(--border); border-radius:var(--control-radius); }
 .committee-options legend { padding:0 4px; font-size:12px; font-weight:600; }
@@ -1078,6 +1067,45 @@ body,
 .plan-table .sticky-name > small,
 .table-footer,
 .rec-table small { font-size: var(--type-note); }
+
+
+/* Reserve the disclosure gutter on every model row, including leaves. */
+.annual-sheet .model-name {
+  display: inline-grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 4px;
+  align-items: center;
+  vertical-align: middle;
+  max-width: 100%;
+  min-height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--type-table);
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: start;
+}
+.annual-sheet .model-name > span { grid-column: 2; overflow-wrap: anywhere; }
+.annual-sheet button.model-name::before {
+  content: '';
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: center;
+  width: 6px;
+  height: 6px;
+  border: solid #65758a;
+  border-width: 1.5px 1.5px 0 0;
+  transform: rotate(45deg);
+}
+.annual-sheet button.model-name[aria-expanded="true"]::before { transform: rotate(135deg); }
+.annual-sheet button.model-name:is(:hover,:focus-visible)::before { border-color: currentColor; }
+.annual-sheet:not(.grid-editing) .plan-table .generation-member-row.model-row .sticky-name { padding-left: 32px; }
+.annual-sheet:not(.grid-editing) .plan-table .version-row .sticky-name { padding-left: 46px; }
+.annual-sheet:not(.grid-editing) .plan-table .generation-member-row.version-row .sticky-name { padding-left: 60px; }
 
 /* Brand and actions share the first row. Keep navigation in its own scroll area. */
 .app-header { flex-wrap: wrap; gap: 6px 12px; }

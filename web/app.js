@@ -835,13 +835,14 @@ function planMetricRow(ps,label,level,id,visibleMonths,field,{isOpen=false,showN
   if(one){
     labelContent=`<button class="row-link" data-detail="${p.id}">${esc(label)}</button>${p.read_only?'<small>自动汇总 · 只读</small>':p.active===false?'<small>已停用</small>':''}${p.name_conflict?'<small class="catalog-alert">同名待区分</small>':''}`;
   } else if(showName && level==='model'){
+    labelContent=`<span class="model-name"><span>${esc(label)}</span></span>`;
     const kind=planChildKind(ps);
     const hasDetails=kind==='generations'
       ? childProducts(ps).some(child=>!rowHidden('model',modelGroupKey(child)))
       : ps.some(product=>!isModelPlan(product)&&!productHidden(product));
     if(hasDetails){
       detailKind=kind;
-      labelContent=`<button class="row-toggle" data-expand="${esc(id)}" aria-expanded="${isOpen}"><span aria-hidden="true">${isOpen?'−':'+'}</span>${esc(label)}</button>`;
+      labelContent=`<button class="model-name row-toggle" data-expand="${esc(id)}" aria-expanded="${isOpen}"><span>${esc(label)}</span></button>`;
     }
   }
   const modelDraft=level==='model'&&gridDraft?gridRow(gridDraft.modelRows.get(id)):null;
