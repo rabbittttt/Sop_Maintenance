@@ -3,7 +3,7 @@ import vm from 'node:vm';
 
 import {dashboardSource as source} from './dashboard_source.mjs';
 const dialog={open:false},document={hidden:false,querySelector:()=>dialog,querySelectorAll:()=>[]};
-const context=vm.createContext({document,localStorage:{getItem:()=>null},polls:0,loads:0,
+const context=vm.createContext({document,window:{frameElement:{hidden:false}},localStorage:{getItem:()=>null},polls:0,loads:0,
   status:{status:'frontend',message:'',data_revision:'2:1:1',source_refresh:{}}});
 vm.runInContext(source.split("document.addEventListener('click'")[0],context);
 const run=code=>vm.runInContext(code,context);
@@ -20,6 +20,10 @@ const backgroundPolls=context.polls;
 await run('pollDataStatus()');
 assert.equal(context.polls,backgroundPolls,'A background tab does not poll the service.');
 document.hidden=false;
+context.window.frameElement.hidden=true;
+await run('pollDataStatus()');
+assert.equal(context.polls,backgroundPolls,'A hidden workbench panel does not poll.');
+context.window.frameElement.hidden=false;
 run("gridDraft={marker:'unsaved'};status.data_revision='3:1:1';");
 const polls=context.polls;
 await run('pollDataStatus()');

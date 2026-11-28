@@ -1287,11 +1287,19 @@ async function handleAction(action,el) {
   }
   if(action==='export-match') {const d=window.currentMatching;return exportCSV(`匹配率_${matchMonth}.csv`,['提前周次','业务日期','SOP计划','实际发货','匹配率%','权重','贡献百分点','状态'],d.rows.map(r=>[r.week,r.business_date,r.plan,r.actual,r.match,r.weight,r.contribution,statusText(r.status)]));}
 }
+const dashboardFrame=globalThis.window?.frameElement;
+let statusPollBusy=false;
+function canPollDataStatus(){
+  return state&&!document.hidden&&!dashboardFrame?.hidden&&!$('#edit-dialog').open&&!generationSwitchPending&&!gridDraft;
+}
 async function pollDataStatus() {
-  if(!state||document.hidden||$('#edit-dialog').open||generationSwitchPending||gridDraft)return;
+  if(statusPollBusy||!canPollDataStatus())return;
   if(page==='operation-log')return pollOperationLog();
+  statusPollBusy=true;
   try {
-    const sync=await api('/api/status');if(gridDraft)return;const view=sync.generation_view;
+    const sync=await api('/api/status');
+    if(!canPollDataStatus())return;
+    const view=sync.generation_view;
     if(view?.error) {
       state.generation_view=view;
       showGenerationError(view.error,'rules');
@@ -1302,6 +1310,7 @@ async function pollDataStatus() {
       await load();$$('.table-scroll').forEach((el,i)=>{if(scrolls[i]){el.scrollLeft=scrolls[i].left;el.scrollTop=scrolls[i].top;}});
     }
   } catch { /* Manual refresh reports connection errors; the next poll retries. */ }
+  finally { statusPollBusy=false; }
 }
 document.addEventListener('click',async e=>{
   const el=e.target.closest('button');if(!el)return;
@@ -1419,4 +1428,6 @@ window.addEventListener('beforeunload',e=>{if(gridDraft && (!frameAccount || fra
 window.addEventListener('unhandledrejection',e=>toast(e.reason?.message||'加载失败，请重试',true));
 startDashboard().catch(err=>{$('#app').innerHTML=`<div class="empty-state"><h1>暂时无法连接数据服务</h1><p>${esc(err.message)}</p><p>${access.gateway?'请联系应用负责人检查内网业务服务，稍后刷新重试。':'请使用项目中的启动脚本打开看板。'}</p></div>`;});
 
+if(dashboardFrame)new MutationObserver(pollDataStatus).observe(dashboardFrame,{attributes:true,attributeFilter:['hidden']});
+document.addEventListener('visibilitychange',pollDataStatus);
 setInterval(pollDataStatus,15000);
