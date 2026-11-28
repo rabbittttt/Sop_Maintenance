@@ -373,6 +373,9 @@ def make_handler(store, web_root, port, *, snapshot_backup=None, plan_export=Non
                         generation_view = {"error": str(error)}
                     self._json({"data_revision": store.data_revision(), "source_refresh": source_refresh.status(),
                                 "generation_view": generation_view, "demand_revision": demand.revision(store)})
+                elif path == "/api/operations":
+                    from sop.operations import list_operations
+                    self._json(list_operations(store, query.get("entity"), query.get("cursor")))
                 elif path == "/api/history":
                     self._json(store.history(query.get("product_id"), query.get("month"), query.get("entity")))
                 elif path == "/api/backups/status" and snapshot_backup:

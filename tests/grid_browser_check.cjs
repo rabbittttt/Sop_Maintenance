@@ -64,6 +64,13 @@ async function main() {
       const url=new URL(route.request().url());
       if(url.pathname.startsWith('/api/'))apiPaths.push(url.pathname);
       if(url.pathname==='/api/session')return route.fulfill({json:{mode:'console',user:sessionAccount,canWrite:true}});
+      if(url.pathname==='/api/operations'){
+        assert.equal(route.request().method(),'GET');
+        return route.fulfill({json:{items:[{
+          recorded_at:'2026-10-28T10:00:00+08:00',owner:mainAccount,entity:'plan',action:'修改SOP计划',
+          subject:'智界 R7 2026款',month:'2026-10',detail:'SOP计划量 100 → 200',reason:'月度调整',
+        }],next_cursor:null}});
+      }
       if(url.pathname==='/api/user-views'){
         const record=personalViews();
         if(route.request().method()==='GET')return route.fulfill({json:record});
@@ -179,6 +186,23 @@ async function main() {
     assert.equal(await page.locator('[data-action="bulk-plan"]').isEnabled(),true);
     assert.ok(await page.locator('[data-action="bulk-plan"]').evaluate(el=>el.classList.contains('primary')));
     assert.equal(await page.locator('[data-action="open-workbook"],[data-action="manage-products"],#target-filter,[data-action="view-panel"]').count(),0);
+    const operationsTab=page.getByRole('button',{name:'操作记录',exact:true});
+    assert.equal(await page.getByRole('button',{name:'数据与规则',exact:true}).count(),0);
+    await operationsTab.click();
+    const recordRow=page.getByRole('row').filter({hasText:'SOP计划量 100 → 200'});
+    await recordRow.waitFor();
+    assert.ok((await recordRow.innerText()).includes(mainAccount));
+    assert.ok((await recordRow.innerText()).includes('智界 R7 2026款'));
+    assert.equal(await operationsTab.getAttribute('aria-current'),'page');
+    await page.getByRole('button',{name:'SOP计划',exact:true}).click();
+    await page.getByRole('button',{name:'计划设置',exact:true}).click();
+    const planSettings=page.getByRole('dialog',{name:'计划设置'});
+    assert.equal(await planSettings.getByRole('button',{name:'刷新销量文件'}).isEnabled(),true);
+    assert.equal(await planSettings.getByRole('checkbox',{name:'7、8月补足M+6'}).isChecked(),true);
+    assert.equal(await planSettings.getByRole('button',{name:'保存规则'}).isEnabled(),true);
+    await planSettings.getByRole('button',{name:'来源与停用管理'}).click();
+    await page.getByRole('dialog',{name:'车型与版本'}).getByRole('button',{name:'关闭',exact:true}).click();
+    console.log('PASS: operation records navigation and plan settings access.');
     assert.equal(await page.locator('#table-view-name').isVisible(),true);
     assert.equal(await page.locator('[data-action="view-save"]').isVisible(),true);
     assert.equal(await page.locator('[data-action="rows-restore"]').isVisible(),true);

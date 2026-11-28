@@ -258,6 +258,38 @@ class StoreTest(unittest.TestCase):
         self.assertFalse(saved_july["settings"]["bridge_m6"])
         self.assertEqual(saved_july["meta"]["months"][-1], "2026-12")
 
+    def test_operations_pages_and_duplicate_timestamps(self):
+        from sop.operations import list_operations
+
+        for rev in range(55):
+            self.save(self.plan(sop=rev, revision=rev))
+        self.ship(value=0)
+        first = list_operations(self.store, "plan")
+        self.assertEqual(len(first["items"]), 50)
+        self.assertEqual(first["items"][0]["detail"], "SOP计划量 53 → 54")
+        self.assertEqual(first["items"][0]["owner"], "Test Owner")
+        self.assertEqual(first["items"][0]["subject"], "A M 2026")
+        self.save(self.plan(sop=100, revision=55))
+        rest = list_operations(self.store, "plan", first["next_cursor"])
+        self.assertEqual(len(rest["items"]), 5)
+        self.assertEqual(rest["items"][-1]["detail"], "SOP计划量 — → 0")
+        self.assertIsNone(rest["next_cursor"])
+        self.assertIn("实际发货量 — → 0", list_operations(self.store, "shipment")["items"][0]["detail"])
+        self.assertTrue(list_operations(self.store, "catalog")["items"])
+        self.assertEqual(list_operations(self.store, "reconcile")["items"], [])
+        self.assertIsNone(self.store.db.execute("SELECT 1 FROM sqlite_master WHERE name='reconcile_audit'").fetchone())
+        with self.assertRaises(ValidationError):
+            list_operations(self.store, cursor="[]")
+
+    def test_operations_include_existing_reconciliation_decisions(self):
+        from sop.operations import list_operations
+        from sop.reconcile import Reconciliation
+
+        rounds = Reconciliation(self.store, self.root)
+        rounds.create({"name": "月度核对", "start_month": "2026-05", "end_month": "2026-06", "owner": "李四"})
+        record = list_operations(self.store, "reconcile")["items"][0]
+        self.assertEqual((record["action"], record["owner"], record["subject"]), ("新建对账", "李四", "月度核对"))
+
     def test_http_security_and_error_statuses(self):
         (self.root / "index.html").write_text("<html>local test</html>", encoding="utf-8")
         server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
@@ -283,6 +315,10 @@ class StoreTest(unittest.TestCase):
             payload = json.dumps({"owner": "test", "changes": [self.plan()]})
             self.assertEqual(request("POST", "/api/plans", payload, {"Content-Type": "application/json"})[0], 200)
             self.assertEqual(request("POST", "/api/plans", payload, {"Content-Type": "application/json"})[0], 409)
+            status, data = request("GET", "/api/operations?entity=plan")
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(data)["items"][0]["subject"], "A M 2026")
+            self.assertEqual(request("GET", "/api/operations?cursor=bad")[0], 400)
             self.assertEqual(request("GET", "/../not-available")[0], 404)
         finally:
             server.shutdown()

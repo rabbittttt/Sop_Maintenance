@@ -23,7 +23,7 @@ WEB_EXTENSIONS = {".html", ".css", ".js", ".mjs", ".json", ".svg", ".png", ".ico
 REQUIRED_FILES = {"server.py", "sop/__init__.py", "sop/gateway.py", "sop/paths.py", "sop/store.py",
                   "requirements.txt", "requirements-intranet.txt", "web/index.html",
                   "integration/iis/SopIdentityBridge.cs", "sop/excel_worker.py", "sop/xlsx_export.py",
-                  "sop/xlsx_backup.py", "web/app.js", "web/plan-excel.js", "web/history.js", "web/option-split.js"}
+                  "sop/xlsx_backup.py", "sop/operations.py", "web/app.js", "web/plan-excel.js", "web/history.js", "web/option-split.js", "web/operation-log.js"}
 
 
 def reject_reparse(path: Path) -> None:

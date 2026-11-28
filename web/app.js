@@ -104,7 +104,7 @@ const conflictValue = c => v => c.kind==='catalog' ? esc(typeof v==='boolean'?(v
 const conflictField = c => c.kind==='catalog' ? ({brand:'品牌',model:'车型',version:'版本名称',active:'启用状态'})[c.field]||'目录' : c.month||'';
 const pct = v => v == null ? '—' : `${Number(v).toFixed(1)}%`;
 const brands = ['智界','享界','尊界','尚界','问界'];
-const titles = {planning:'SOP计划表', 'option-split':'选配拆分', reconcile:'资料对账', history:'历史快照', matching:'计划匹配率', data:'数据与规则'};
+const titles = {planning:'SOP计划表', 'option-split':'选配拆分', reconcile:'资料对账', history:'历史快照', matching:'计划匹配率', 'operation-log':'操作记录'};
 const statusText = v => ({official:'正式成绩',incomplete:'数据未齐全',missing:'实绩待维护',pending:'待结算',in_progress:'考核月未结束',settled:'已结算',corrected:'已更正',future:'未到取数日',missing_snapshot:'历史快照缺失',missing_plan:'计划待维护',undefined_zero:'双零口径待确认',complete:'可计分'})[v] || v;
 let state, page = 'planning', brand = '', model = '', query = '', target = '', metric = '', range = 'rolling';
 let historyRange = 'recent';
@@ -639,7 +639,7 @@ function showGenerationError(message,kind=generationErrorKind) {
   generationViewError=message;generationErrorKind=kind;
   const title=kind==='connection'?'业务服务连接中断':'代际范围暂不可用';
   const guidance=kind==='connection'?'请确认计划工作台服务仍在运行，连接恢复后点击“刷新数据”；页面也会自动重试。确认当前口径前暂停编辑。':'请修正规则后点击“刷新数据”；页面也会自动重试。';
-  if(page!=='history')$('#app').innerHTML=`<section class="card empty-state" role="alert"><h1>${title}</h1><p>${esc(message)}</p><p>${guidance}</p></section>`;
+  if(page!=='history'&&page!=='operation-log')$('#app').innerHTML=`<section class="card empty-state" role="alert"><h1>${title}</h1><p>${esc(message)}</p><p>${guidance}</p></section>`;
 }
 async function reloadGenerationState() {
   for(let attempt=0;attempt<3;attempt++) {
@@ -987,7 +987,8 @@ function planning() {
       + button('取消','grid-cancel','small',gridLocked()?'disabled':'')
     : button(`${planToolIcon('edit')}网页维护`,'bulk-plan','primary small')
       + button(`${planToolIcon('import')}导入Excel`,'import-plan','small')
-      + button(`${planToolIcon('export')}导出Excel`,'export-plan','small');
+      + button(`${planToolIcon('export')}导出Excel`,'export-plan','small')
+      + button('计划设置','plan-settings','small');
   $('#app').innerHTML=`${pageHeading('planning')}
     <div class="plan-controls"><div class="annual-toolbar"><div class="annual-filters"><label class="field inline-field year-field">周期<select id="range-filter">${opt('rolling','M+6（滚动12个月）',range)}${opt('annual','全年',range)}</select></label>${rolling?'':`<label class="field inline-field year-field">年份<select id="year-filter">${years.map(y=>opt(y,`${y}年`,planYear)).join('')}</select></label>`}<label class="field inline-field">品牌<select id="brand-filter">${opt('','全部品牌',brand)}${visibleBrands().map(b=>opt(b,b,brand)).join('')}</select></label><label class="field inline-field">车型<select id="model-filter">${opt('','全部车型',model)}${models.map(m=>opt(m,m,model)).join('')}</select></label><label class="field inline-field annual-search"><span class="visually-hidden">搜索车型或版本</span>${planToolIcon('search')}<input id="version-search" placeholder="搜索车型 / 版本" value="${esc(query)}"></label></div><div class="toolbar plan-actions">${actions}</div></div>
     <div class="sheet-tools">${viewControls()}<div class="toolbar display-toggles">${committeeToggles}<span class="plan-toggle-group">${displayToggles.join('')}</span><span class="plan-toggle-group">${expansionButtons.join('')}</span></div></div></div>
@@ -1181,11 +1182,14 @@ function editShipments(id=matchProduct||products().find(p=>!p.read_only)?.id) {
     await api('/api/shipments',{changes:[{product_id:pid,month:m,quantity:Number($('#ship-quantity').value),source:$('#ship-source').value,status:$('#ship-status').value,batch:$('#ship-batch').value,revision:shipmentIndex.get(key(pid,m))?.revision||0}],owner:$('#ship-owner').value.trim()});owner=$('#ship-owner').value.trim();localStorage.setItem('sop-owner',owner);closeDialog();await load();toast('发货实绩已保存');
   }catch(err){$('#form-error').textContent=err.message;save.disabled=false;}};
 }
-function dataPage() {
-  const meta=state.meta,sources=state.sources?.length?state.sources:(meta.source_files||[]),q=(meta.quality||[]).filter(item=>item?.level==='warning'||item?.level==='error');
-  $('#app').innerHTML=pageHeading('data')+
-    `<div class="two-col"><section class="card"><div class="panel-head"><h2>销量数据接入</h2><div class="toolbar">${button('来源与停用管理','manage-products','small')}${button('刷新销量文件','refresh-sales','primary small')}</div></div><div class="card-body"><dl class="info-list"><dt>业务数据截至</dt><dd>${esc(meta.data_through||'待确认')}</dd>${state.source_refresh?.status==='error'?`<dt>读取异常</dt><dd>${esc(state.source_refresh.message)}</dd>`:''}<dt>来源状态</dt><dd>${esc(({waiting:"等待文件稳定",error:"读取异常",synced:"已读取",watching:"等待检查"})[state.source_refresh?.status]||"待确认")}</dd><dt>最近成功读取</dt><dd>${dateText(state.source_refresh?.last_refresh||meta.generated_at)}</dd><dt>车型锁单</dt><dd>交车锁单行</dd><dt>版本锁单</dt><dd>版本数量行</dd><dt>选配比例</dt><dd>近28天占比列</dd><dt>版本数量</dt><dd>${state.products.length} 个</dd><dt>参考口径</dt><dd>${meta.metrics.map(m=>esc(m.label)).join('、')}</dd></dl><h3>来源文件</h3><ul class="source-list">${sources.map(s=>`<li>${esc(typeof s==='string'?s:s.file||s.name||s.path||JSON.stringify(s))}${s.sheet?`<small>${esc(s.sheet)}</small>`:''}</li>`).join('')}</ul></div></section><section class="card"><div class="panel-head"><h2>计划与快照规则</h2></div><div class="card-body"><dl class="info-list"><dt>数据库目录</dt><dd>${esc(state.database_directory||"—")}</dd><dt>维护颗粒度</dt><dd>品牌 → 车型＋年款 × 月份；版本可选</dd><dt>本月计划口径</dt><dd>全月总量（含已发生部分）</dd><dt>年度扩展</dt><dd>每年9月开放到次年12月</dd><dt>当前计划截止</dt><dd>${shortMonth(state.plan_end)}</dd><dt>每日快照截点</dt><dd>24:00（北京时间）</dd><dt>提前0周</dt><dd>月初周内属于当月的天数超过4天，取上周日24:00。其余取当周日24:00。</dd></dl><label class="checkbox-field"><input id="bridge-toggle" type="checkbox" ${state.settings.bridge_m6!==false?'checked':''}>7、8月补足M+6（7月到次年1月，8月到次年2月）</label>${button('保存规则','save-settings')}</div></section></div>`+
-    (q.length?`<section class="card page-section"><div class="panel-head"><h2>数据检查</h2></div><div class="card-body">${q.map(item=>`<div class="quality-row"><span class="badge warn">${item.level==='error'?'异常':'待核对'}</span><span>${esc(item.message||item.name||'')}</span></div>`).join('')}</div></section>`:'');
+function planSettings() {
+  const warning=state.source_refresh?.status==='error'?state.source_refresh.message:'';
+  openDialog(`<h2>计划设置</h2>
+    <div class="toolbar">${button('来源与停用管理','manage-products','small')}${button('刷新销量文件','refresh-sales','small')}</div>
+    ${warning?`<p class="inline-error" role="alert">${esc(warning)}</p>`:''}
+    <dl class="info-list"><dt>数据库目录</dt><dd>${esc(state.database_directory||'—')}</dd></dl>
+    <label class="checkbox-field"><input id="bridge-toggle" type="checkbox" ${state.settings?.bridge_m6!==false?'checked':''}>7、8月补足M+6</label>
+    <div class="dialog-actions">${button('关闭','close-dialog')}${button('保存规则','save-settings','primary')}</div>`);
 }
 let reconcilePage;
 async function renderReconcilePage() {
@@ -1209,9 +1213,10 @@ async function renderPage() {
   $('#page-title').textContent=titles[page];
   $$('[data-page]').forEach(b=>{b.classList.toggle('active',b.dataset.page===page);b.setAttribute('aria-current',b.dataset.page===page?'page':'false');});
   if (!state) return; // The selected tab will render when the initial state arrives.
+  if(page==='operation-log')return operationLogPage();
   if(page==='reconcile')return renderReconcilePage();
   if(generationViewError&&page!=='history')return showGenerationError(generationViewError);
-  if(page==='planning')planning();else if(page==='option-split')await optionPage();else if(page==='history')await historyPage();else if(page==='matching')await matchingPage();else dataPage();
+  if(page==='planning')planning();else if(page==='option-split')await optionPage();else if(page==='history')await historyPage();else if(page==='matching')await matchingPage();
 }
 async function handleAction(action,el) {
   if(writeActions.has(action))requireWrite();
@@ -1226,6 +1231,7 @@ async function handleAction(action,el) {
   if(action==='retry-option-mix'){optionRequestId++;optionMix=null;optionMixError='';return optionPage();}
 
   if(action==='close-dialog')return closeDialog();
+  if(action==='plan-settings')return planSettings();
   if(action==='manage-products')return productManager();
   if(action==='new-product')return editProduct();
   if(action==='rename-model')return renameModel();
@@ -1260,7 +1266,7 @@ async function handleAction(action,el) {
   if(action==='import-plan')return importPlans();
   if(action==='detail-edit'){closeDialog();return editInGrid(el.dataset.product);}
   if(action==='edit-shipments')return editShipments();
-  if(action==='save-settings'){await api('/api/settings',{bridge_m6:$('#bridge-toggle').checked});await load();return toast('计划范围规则已保存');}
+  if(action==='save-settings'){await api('/api/settings',{bridge_m6:$('#bridge-toggle').checked});closeDialog();await load();return toast('计划范围规则已保存');}
   if(action==='refresh-sales') {el.disabled=true;const text=el.textContent;el.textContent='正在检查…';try{const result=await api('/api/refresh',{});await load();toast(result.status==='waiting'?result.message:result.status==='unchanged'?'来源文件没有新修改': '销量已刷新，人工计划已保留');}finally{el.disabled=false;el.textContent=text;}return;}
   if(action==='refresh-backups')return historyPage();
   if(action==='create-snapshot') {
@@ -1283,6 +1289,7 @@ async function handleAction(action,el) {
 }
 async function pollDataStatus() {
   if(!state||document.hidden||$('#edit-dialog').open||generationSwitchPending||gridDraft)return;
+  if(page==='operation-log')return pollOperationLog();
   try {
     const sync=await api('/api/status');if(gridDraft)return;const view=sync.generation_view;
     if(view?.error) {

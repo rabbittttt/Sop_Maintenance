@@ -70,7 +70,7 @@ class ReleaseSmokeTest(unittest.TestCase):
                     launch_log = (root / "launch.log").read_text(encoding="utf-8")
                     self.assertIn("SOP管理已就绪", launch_log)
                     html = request("").decode()
-                    for module in ("plan-excel.js", "option-split.js", "history.js", "app.js"):
+                    for module in ("plan-excel.js", "option-split.js", "history.js", "operation-log.js", "app.js"):
                         self.assertIn(module, html)
                         self.assertEqual(request(module), (release / "web" / module).read_bytes())
                     state = json.loads(request("api/state"))
@@ -95,6 +95,8 @@ class ReleaseSmokeTest(unittest.TestCase):
                     result = json.loads(request("api/plans/import-xlsx", {"filename": "fixture.xlsx",
                         "content_base64": base64.b64encode(contents.getvalue()).decode()}))
                     self.assertEqual(result["imported"], 1, result)
+                    operations = json.loads(request("api/operations?entity=plan"))["items"]
+                    self.assertTrue(any(row["month"] == month and "3000" in row["detail"] for row in operations), operations)
                     plans = json.loads(request("api/state"))["plans"]
                     self.assertTrue(any(p["product_id"] == "fixture" and p["month"] == month and p["sop"] == 3000 for p in plans))
                 finally:
