@@ -104,6 +104,10 @@ class CommitteeDecisionsTest(unittest.TestCase):
         self.assertEqual(first["saved_count"], 0)
         self.assertEqual((first["committee"]["scope"], first["committee"]["brands"]), ("brands", ["智界"]))
         self.assertEqual(first["committee"]["model_count"], 3)
+        from sop.operations import list_operations
+        event = list_operations(self.store, "committee")["items"][0]
+        self.assertEqual((event["subject"], event["owner"]), ("一级计委", "计委记录人"))
+        self.assertIn("智界 · 3 个车型", event["detail"])
         self.store.save_grid_batch(self.confirm(level=2, changes=[self.edit("r7-pro", 180)]))
         third = self.store.save_grid_batch(self.confirm(level=3, scope="models", models=[self.older_r7, self.s9],
             changes=[self.edit("r7-new", 60)]))

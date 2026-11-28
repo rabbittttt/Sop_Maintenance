@@ -58,6 +58,12 @@ class DemandTest(unittest.TestCase):
         self.assertEqual(len(self.store.state()['products']), 2)
         second = demand.import_content(self.store, content, base_revision=0, owner='张三')
         self.assertTrue(second['replayed'])
+        from sop.operations import list_operations
+        records = list_operations(self.store, "demand")["items"]
+        self.assertEqual(len(records), 4)
+        self.assertTrue(all(row["owner"] == "张三" for row in records))
+        zero = next(row for row in records if row["subject"] == "智界 未来车 2027款" and row["month"] == "2026-12")
+        self.assertEqual(zero["detail"], "要货计划量 — → 0")
         change = self.table([['智界', '未来车 2027款', 120, None]])
         demand.import_content(self.store, change, base_revision=first['demand_revision'], owner='李四')
         values = {(row['model'], row['month']): row['quantity'] for row in demand.state(self.store)['demand_plans']}
